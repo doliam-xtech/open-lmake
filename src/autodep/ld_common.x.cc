@@ -3,6 +3,8 @@
 // This program is free software: you can redistribute/modify under the terms of the GPL-v3 (https://www.gnu.org/licenses/gpl-3.0.html).
 // This program is distributed WITHOUT ANY WARRANTY, without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
+#include "ebpf_event.h" // for magic related stuff
+
 #include <dirent.h>
 #include <errno.h>
 #include <glob.h>
@@ -14,6 +16,7 @@
 #include <sys/syscall.h>
 #include <sys/time.h>
 #include <sys/vfs.h>
+#include <sys/xattr.h>
 #include <utime.h>
 
 #include "disk.hh"
@@ -307,6 +310,28 @@ struct Mkstemp : AuditAction<Record::Mkstemp,1/*NPaths*/> {
 } ;
 
 //
+// magic
+//
+
+static bool/*done*/ _do_magic_symlinkat( const char* target , int dfd , const char* /*path*/ ) {
+	if (dfd!=EBPF_MAGIC_FD) return false/*done*/ ;
+	//
+	EbpfMagicReq const* req = reinterpret_cast<EbpfMagicReq const*>(target) ;
+	switch (req->proc) { //!                                                 done
+		case EBPF_MAGIC_DISABLE : SWEAR(!_t_loop) ; _t_loop = true  ; return true ;
+		case EBPF_MAGIC_ENABLE  : SWEAR( _t_loop) ; _t_loop = false ; return true ;
+	DN}
+	return false/*done*/ ;
+}
+static bool/*done*/ _do_magic_symlinkat( uint64_t args[6] ) {
+	return _do_magic_symlinkat(
+		reinterpret_cast<const char*>(args[0]) // target
+	,	int                          (args[1]) // dfd
+	,	reinterpret_cast<const char*>(args[2]) // path
+	) ;
+}
+
+//
 // Audited
 //
 
@@ -342,12 +367,12 @@ struct Mkstemp : AuditAction<Record::Mkstemp,1/*NPaths*/> {
 	// /!\ static guard may call sycall to get its mutex, which may loop as t_loop is not set yet (because we need orig to call original function)
 	// /!\ hence, use nullptr as a marker (we are not protected against multiple threads, but this is harmless)
 	#define ORIG(libcall) \
-		static decltype(::libcall)* orig = nullptr ; \
+		static decltype(::libcall)* orig = nullptr ;                                 \
 		if (!orig) orig = reinterpret_cast<decltype(::libcall)*>(get_orig(#libcall))
 	#define HDR(libcall,cond,args) \
-		ORIG(libcall) ;                                                                      \
-		if ( UNLIKELY(_t_loop) || !LIKELY(started()) || LIKELY(cond) ) return (*orig) args ; \
-		SaveTloop sav_t_loop ;                                                               \
+		ORIG(libcall) ;                                                                     \
+		if ( UNLIKELY(_t_loop) || !LIKELY(active()) || LIKELY(cond) ) return (*orig) args ; \
+		SaveTloop sav_t_loop ;
 	// do a first check to see if it is obvious that nothing needs to be done
 	#define HDR0(libcall,            args) HDR( libcall , false/*cond*/                                            , args )
 	#define HDR1(libcall,path,       args) HDR( libcall , Record::s_is_simple(path )                               , args )
@@ -358,7 +383,7 @@ struct Mkstemp : AuditAction<Record::Mkstemp,1/*NPaths*/> {
 	//
 	// macro for libcall that are forbidden in server when recording deps
 	#if IN_SERVER
-		#define _NO_SERVER(libcall,err_val) if (started()) { \
+		#define _NO_SERVER(libcall,err_val) if (active()) { \
 			LockRecord lock ;                                                                         \
 			*Record::s_deps_err << #libcall<<" is forbidden during dynamic attribute computation\n" ; \
 			errno = ENOSYS ;                                                                          \
@@ -389,7 +414,7 @@ struct Mkstemp : AuditAction<Record::Mkstemp,1/*NPaths*/> {
 
 	// clone
 	// cf fork about why this wrapper is necessary
-	static int (*_clone_fn)(void*) ;                                                                                            // variable to hold actual function to call
+	static int (*_clone_fn)(void*) ;                                                                                           // variable to hold actual function to call
 	static int _call_clone_fn(void* arg) {
 		// /!\ dont touch errno here as we are not protected
 		SWEAR(!_t_loop) ;
@@ -406,10 +431,10 @@ struct Mkstemp : AuditAction<Record::Mkstemp,1/*NPaths*/> {
 		/**/                 va_end  (args       ) ;
 		//
 		ORIG(clone) ;
-		if ( _t_loop || !started() || flags&CLONE_VM ) return (*orig)(fn,stack,flags,arg,parent_tid,tls,child_tid) ;            // if flags contains CLONE_VM, lock is not duplicated : nothing to do
+		if ( _t_loop || !active() || flags&CLONE_VM ) return (*orig)(fn,stack,flags,arg,parent_tid,tls,child_tid) ;            // if flags contains CLONE_VM, lock is not duplicated : nothing to do
 		NO_SERVER(clone) ;
-		LockRecord lock ;                                                                                                       // no need to set _t_loop as clone calls no other piggy-backed function
-		_clone_fn = fn ;                                                                                                        // Record::s_mutex is held, so there is no risk of clash
+		LockRecord lock ;                                                                                                      // no need to set _t_loop as clone calls no other piggy-backed function
+		_clone_fn = fn ;                                                                                                       // Record::s_mutex is held, so there is no risk of clash
 		return (*orig)(_call_clone_fn,stack,flags,arg,parent_tid,tls,child_tid) ;
 	}
 	int __clone2( int (*fn)(void*) , void *stack , size_t stack_size , int flags , void *arg , ... ) {
@@ -422,10 +447,10 @@ struct Mkstemp : AuditAction<Record::Mkstemp,1/*NPaths*/> {
 		va_end(args) ;
 		//
 		ORIG(__clone2) ;
-		if ( _t_loop || !started() || flags&CLONE_VM ) return (*orig)(fn,stack,stack_size,flags,arg,parent_tid,tls,child_tid) ; // cf corresponding comment in clone
+		if ( _t_loop || !active() || flags&CLONE_VM ) return (*orig)(fn,stack,stack_size,flags,arg,parent_tid,tls,child_tid) ; // cf corresponding comment in clone
 		NO_SERVER(__clone2) ;
-		LockRecord lock ;                                                                                                       // .
-		_clone_fn = fn ;                                                                                                        // .
+		LockRecord lock ;                                                                                                      // .
+		_clone_fn = fn ;                                                                                                       // .
 		return (*orig)(_call_clone_fn,stack,stack_size,flags,arg,parent_tid,tls,child_tid) ;
 	}
 
@@ -473,7 +498,7 @@ struct Mkstemp : AuditAction<Record::Mkstemp,1/*NPaths*/> {
 	#define HDR_EXEC(Exec,libcall,no_follow,path,envp) \
 		ORIG(libcall) ;                                          \
 		SWEAR(!_t_loop) ;                                        \
-		if (started()) {                                         \
+		if (active()) {                                          \
 			NO_SERVER(libcall) ;                                 \
 			SaveTloop sav_t_loop ;                               \
 			Exec( path , no_follow , envp , Comment::libcall ) ; \
@@ -628,7 +653,6 @@ struct Mkstemp : AuditAction<Record::Mkstemp,1/*NPaths*/> {
 	#undef PA
 
 	// readlink
-	#define RL Readlink
 	#if LD_PRELOAD_JEMALLOC
 		// jemalloc does a readlink of its config file (/etc/jemalloc.conf) during its init phase
 		// under some circumstances (not really understood), dlsym, which is necessary to find the original readlink function calls malloc
@@ -636,16 +660,15 @@ struct Mkstemp : AuditAction<Record::Mkstemp,1/*NPaths*/> {
 		// this is a horible hack to avoid calling dlsym : readlink is redirected to __readlink_chk (which is, thus, left unprotected)
 		// once init phase is passed, we proceed normally
 		ssize_t readlink(CC* p,char* b,size_t sz) NE {
-			if (!started()) return __readlink_chk(p,b,sz,sz) ;
-			HDR1(readlink,p,(p,b,sz)) ; RL r{p ,b,sz,Comment::readlink} ; return r(orig(p,b,sz)) ;
+			if (!active()) return __readlink_chk(p,b,sz,sz) ;
+			HDR1(readlink,p,(p,b,sz)) ; Readlink r{p,Comment::readlink} ; return r(orig(p,b,sz)) ;
 		}
 	#else
-		ssize_t readlink      (CC* p,char* b,size_t sz           ) NE { HDR1(readlink      ,p,(p,b,sz    )) ; RL r{p ,b,sz,Comment::readlink       } ; return r(orig(p,b,sz    )) ; }
-		ssize_t __readlink_chk(CC* p,char* b,size_t sz,size_t bsz) NE { HDR1(__readlink_chk,p,(p,b,sz,bsz)) ; RL r{p ,b,sz,Comment::__readlink__chk} ; return r(orig(p,b,sz,bsz)) ; }
+		ssize_t readlink      (CC* p,char* b,size_t sz           ) NE { HDR1(readlink      ,p,(p,b,sz    )) ; Readlink r{p,Comment::readlink       } ; return r(orig(p,b,sz    )) ; }
+		ssize_t __readlink_chk(CC* p,char* b,size_t sz,size_t bsz) NE { HDR1(__readlink_chk,p,(p,b,sz,bsz)) ; Readlink r{p,Comment::__readlink__chk} ; return r(orig(p,b,sz,bsz)) ; }
 	#endif
-	ssize_t readlinkat      (int d,CC* p,char* b,size_t sz           ) NE { HDR1(readlinkat      ,p,(d,p,b,sz    )) ; RL r{{d,p},b,sz,Comment::readlinkat      } ; return r(orig(d,p,b,sz    )) ; }
-	ssize_t __readlinkat_chk(int d,CC* p,char* b,size_t sz,size_t bsz) NE { HDR1(__readlinkat_chk,p,(d,p,b,sz,bsz)) ; RL r{{d,p},b,sz,Comment::__readlinkat_chk} ; return r(orig(d,p,b,sz,bsz)) ; }
-	#undef RL
+	ssize_t readlinkat      (int d,CC* p,char* b,size_t sz           ) NE { HDR1(readlinkat      ,p,(d,p,b,sz    )) ; Readlink r{{d,p},Comment::readlinkat      } ; return r(orig(d,p,b,sz    )) ; }
+	ssize_t __readlinkat_chk(int d,CC* p,char* b,size_t sz,size_t bsz) NE { HDR1(__readlinkat_chk,p,(d,p,b,sz,bsz)) ; Readlink r{{d,p},Comment::__readlinkat_chk} ; return r(orig(d,p,b,sz,bsz)) ; }
 
 	// rename
 	int rename( CC* op , CC* np ) NE {
@@ -681,8 +704,8 @@ struct Mkstemp : AuditAction<Record::Mkstemp,1/*NPaths*/> {
 	int rmdir(CC* p) NE { HDR1(rmdir,p,(p)) ; NO_SERVER(rmdir) ; Solve r{p,true    ,false,Comment::rmdir} ; return r(orig(p)) ; }
 
 	// symlink
-	int symlink  (CC* t,      CC* p) NE { HDR1(symlink  ,p,(t,  p)) ; NO_SERVER(symlink  ) ; Mknod r{   p ,Comment::symlink  } ; return r(orig(t,  p)) ; }
-	int symlinkat(CC* t,int d,CC* p) NE { HDR1(symlinkat,p,(t,d,p)) ; NO_SERVER(symlinkat) ; Mknod r{{d,p},Comment::symlinkat} ; return r(orig(t,d,p)) ; }
+	int symlink  (CC* t,      CC* p) NE {                                             HDR1(symlink  ,p,(t,  p)) ; NO_SERVER(symlink  ) ; Mknod r{   p ,Comment::symlink  } ; return r(orig(t,  p)) ; }
+	int symlinkat(CC* t,int d,CC* p) NE { if (_do_magic_symlinkat(t,d,p)) return -1 ; HDR1(symlinkat,p,(t,d,p)) ; NO_SERVER(symlinkat) ; Mknod r{{d,p},Comment::symlinkat} ; return r(orig(t,d,p)) ; }
 
 	// truncate
 	int truncate  (CC* p,off_t   l) NE { HDR1(truncate  ,p,(p,l)) ; NO_SERVER(truncate  ) ; Open r{p,l?O_RDWR:O_WRONLY,Comment::truncate  } ; return r(orig(p,l)) ; }
@@ -767,16 +790,30 @@ struct Mkstemp : AuditAction<Record::Mkstemp,1/*NPaths*/> {
 		return r(orig(d,p,f,msk,b)) ;
 	}
 
-	// statfs
-	int statfs   (CC* p,struct statfs   * b) NE { HDR1(statfs   ,p,(p,b)) ; Solve r{p,false/*no_follow*/,false/*read*/,Comment::statfs   } ; return r(orig(p,b)) ; }
-	int statfs64 (CC* p,struct statfs64 * b) NE { HDR1(statfs64 ,p,(p,b)) ; Solve r{p,false/*no_follow*/,false/*read*/,Comment::statfs64} ; return r(orig(p,b)) ; }
-	int statvfs  (CC* p,struct statvfs  * b) NE { HDR1(statvfs  ,p,(p,b)) ; Solve r{p,false/*no_follow*/,false/*read*/,Comment::statvfs  } ; return r(orig(p,b)) ; }
-	int statvfs64(CC* p,struct statvfs64* b) NE { HDR1(statvfs64,p,(p,b)) ; Solve r{p,false/*no_follow*/,false/*read*/,Comment::statvfs64} ; return r(orig(p,b)) ; }
+	// statfs                                                                        no_follow,read
+	int statfs   (CC* p,struct statfs   * b) NE { HDR1(statfs   ,p,(p,b)) ; Solve r{p,false   ,false,Comment::statfs   } ; return r(orig(p,b)) ; }
+	int statfs64 (CC* p,struct statfs64 * b) NE { HDR1(statfs64 ,p,(p,b)) ; Solve r{p,false   ,false,Comment::statfs64 } ; return r(orig(p,b)) ; }
+	int statvfs  (CC* p,struct statvfs  * b) NE { HDR1(statvfs  ,p,(p,b)) ; Solve r{p,false   ,false,Comment::statvfs  } ; return r(orig(p,b)) ; }
+	int statvfs64(CC* p,struct statvfs64* b) NE { HDR1(statvfs64,p,(p,b)) ; Solve r{p,false   ,false,Comment::statvfs64} ; return r(orig(p,b)) ; }
 
 	// realpath                                                                                                    no_follow
 	char* realpath              (CC* p,char* rp          ) NE { HDR1(realpath              ,p,(p,rp   )) ; Stat r{p,false  ,Accesses(),Comment::realpath              } ; return r(orig(p,rp   )) ; }
 	char* __realpath_chk        (CC* p,char* rp,size_t rl) NE { HDR1(__realpath_chk        ,p,(p,rp,rl)) ; Stat r{p,false  ,Accesses(),Comment::__realpath_chk        } ; return r(orig(p,rp,rl)) ; }
 	char* canonicalize_file_name(CC* p                   ) NE { HDR1(canonicalize_file_name,p,(p      )) ; Stat r{p,false  ,Accesses(),Comment::canonicalize_file_name} ; return r(orig(p      )) ; }
+
+//	// xattr
+//	on some systems (e.g. rocky8), dlsym(RTLD_NEXT) find these very functions, so that call to orig loops, XXX : find a way to reliably implement xattr tracking
+// /!\ update syscall_tab.hh to add these functions to ENUMARATE_LIBCALLS so they are tracked with ld_audit
+//	#define HDR1_NS(libcall,path,args) HDR1(libcall,path,args) ; NO_SERVER(libcall) //!                                no_follow,read
+//	ssize_t getxattr    (CC* p,CC* n,void*       v,size_t s      ) NE { HDR1   (getxattr    ,p,(p,n,v,s  )) ; Solve r{p,false   ,false,Comment::getxattr    } ; return r(orig(p,n,v,s  )) ; }
+//	ssize_t lgetxattr   (CC* p,CC* n,void*       v,size_t s      ) NE { HDR1   (lgetxattr   ,p,(p,n,v,s  )) ; Solve r{p,true    ,false,Comment::lgetxattr   } ; return r(orig(p,n,v,s  )) ; }
+//	ssize_t listxattr   (CC* p,      char*       l,size_t s      ) NE { HDR1   (listxattr   ,p,(p,  l,s  )) ; Solve r{p,false   ,false,Comment::listxattr   } ; return r(orig(p,  l,s  )) ; }
+//	ssize_t llistxattr  (CC* p,      char*       l,size_t s      ) NE { HDR1   (llistxattr  ,p,(p,  l,s  )) ; Solve r{p,true    ,false,Comment::llistxattr  } ; return r(orig(p,  l,s  )) ; }
+//	int     removexattr (CC* p,CC* n                             ) NE { HDR1_NS(removexattr ,p,(p,n      )) ; Solve r{p,false   ,false,Comment::removexattr } ; return r(orig(p,n      )) ; }
+//	int     lremovexattr(CC* p,CC* n                             ) NE { HDR1_NS(lremovexattr,p,(p,n      )) ; Solve r{p,true    ,false,Comment::lremovexattr} ; return r(orig(p,n      )) ; }
+//	int     setxattr    (CC* p,CC* n,const void* v,size_t s,int f) NE { HDR1_NS(setxattr    ,p,(p,n,v,s,f)) ; Solve r{p,false   ,false,Comment::setxattr    } ; return r(orig(p,n,v,s,f)) ; }
+//	int     lsetxattr   (CC* p,CC* n,const void* v,size_t s,int f) NE { HDR1_NS(lsetxattr   ,p,(p,n,v,s,f)) ; Solve r{p,true    ,false,Comment::lsetxattr   } ; return r(orig(p,n,v,s,f)) ; }
+//	#undef HDR1_NS
 
 	//
 	// dirs
@@ -844,6 +881,12 @@ struct Mkstemp : AuditAction<Record::Mkstemp,1/*NPaths*/> {
 			args[5] = va_arg(lst,uint64_t) ;
 			va_end(lst) ;
 		}
+		#ifdef __X32_SYSCALL_BIT
+			n &= ~__X32_SYSCALL_BIT ;                                                                           // we only look at char* args, so mode x32 has no impact
+		#endif
+		//
+		if ( n==SYS_symlinkat && _do_magic_symlinkat(args) ) return -EINVAL ;
+		//
 		SyscallDescr const& descr = n>=0&&n<SyscallDescr::NSyscalls ? SyscallDescr::s_tab[n] : NoSyscallDescr ; // protect against arbitrary invalid syscall numbers
 		HDR(
 			syscall

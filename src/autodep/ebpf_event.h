@@ -41,6 +41,8 @@ typedef uint8_t  EbpfFlags  ;
 #define EBPF_AT_SYMLINK_NOFOLLOW 0x100
 #define EBPF_EAGAIN               11
 #define EBPF_EINTR                 4
+#define EBPF_EISDIR               21
+#define EBPF_ENOENT                2
 #define EBPF_NAME_MAX             255
 #define EBPF_O_ACCMODE           000000003
 #define EBPF_O_CREAT             000000100
@@ -53,6 +55,7 @@ typedef uint8_t  EbpfFlags  ;
 #define EBPF_O_TRUNC             000001000
 #define EBPF_PATH_MAX            4096
 #define EBPF_RENAME_EXCHANGE       0x2
+#define EBPF_RENAME_NOREPLACE      0x1
 #define EBPF_SIGCONT               18
 #define EBPF_SIGSTOP               19
 #define EBPF_STATX_MODE            0x2u
@@ -63,6 +66,7 @@ typedef uint8_t  EbpfFlags  ;
 #define EBPF_S_IFLNK             0120000
 #define EBPF_S_IFREG             0100000
 #define EBPF_S_IXALL             0000111
+#define EBPF_X_OK                1          // access syscall family
 #define EBPF_X32_SYSCALL_BIT     0x40000000 // syscall is done with the x32 ABI
 
 #ifdef __cplusplus
@@ -72,6 +76,8 @@ typedef uint8_t  EbpfFlags  ;
 	static_assert( EBPF_AT_SYMLINK_NOFOLLOW == AT_SYMLINK_NOFOLLOW ) ;
 	static_assert( EBPF_EAGAIN              == EAGAIN              ) ;
 	static_assert( EBPF_EINTR               == EINTR               ) ;
+	static_assert( EBPF_EISDIR              == EISDIR              ) ;
+	static_assert( EBPF_ENOENT              == ENOENT              ) ;
 	static_assert( EBPF_NAME_MAX            == NAME_MAX            ) ;
 	static_assert( EBPF_O_ACCMODE           == O_ACCMODE           ) ;
 	static_assert( EBPF_O_CREAT             == O_CREAT             ) ;
@@ -88,6 +94,9 @@ typedef uint8_t  EbpfFlags  ;
 	#ifdef RENAME_EXCHANGE
 		static_assert( EBPF_RENAME_EXCHANGE == RENAME_EXCHANGE ) ;
 	#endif
+	#ifdef RENAME_NOREPLACE
+		static_assert( EBPF_RENAME_NOREPLACE == RENAME_NOREPLACE ) ;
+	#endif
 	static_assert( EBPF_SIGCONT == SIGCONT ) ;
 	static_assert( EBPF_SIGSTOP == SIGSTOP ) ;
 	#if defined(STATX_MODE) && defined(STATX_SIZ) && defined(STAX_TYPE)
@@ -100,6 +109,7 @@ typedef uint8_t  EbpfFlags  ;
 	static_assert( EBPF_S_IFLNK         == S_IFLNK                   ) ;
 	static_assert( EBPF_S_IFREG         == S_IFREG                   ) ;
 	static_assert( EBPF_S_IXALL         == (S_IXUSR|S_IXGRP|S_IXOTH) ) ;
+	static_assert( EBPF_X_OK            == X_OK                      ) ;
 	static_assert( EBPF_X32_SYSCALL_BIT == __X32_SYSCALL_BIT         ) ;
 #else
 	#define RING_BUF_SZ     EBPF_RING_BUF_SZ
@@ -111,6 +121,8 @@ typedef uint8_t  EbpfFlags  ;
 	#define AT_SYMLINK_NOFOLLOW EBPF_AT_SYMLINK_NOFOLLOW
 	#define EAGAIN              EBPF_EAGAIN
 	#define EINTR               EBPF_EINTR
+	#define EISDIR              EBPF_EISDIR
+	#define ENOENT              EBPF_ENOENT
 	#define NAME_MAX            EBPF_NAME_MAX
 	#define O_ACCMODE           EBPF_O_ACCMODE
 	#define O_CREAT             EBPF_O_CREAT
@@ -123,6 +135,7 @@ typedef uint8_t  EbpfFlags  ;
 	#define O_TRUNC             EBPF_O_TRUNC
 	#define PATH_MAX            EBPF_PATH_MAX
 	#define RENAME_EXCHANGE     EBPF_RENAME_EXCHANGE
+	#define RENAME_NOREPLACE    EBPF_RENAME_NOREPLACE
 	#define SIGCONT             EBPF_SIGCONT
 	#define SIGSTOP             EBPF_SIGSTOP
 	#define STATX_MODE          EBPF_STATX_MODE
@@ -133,6 +146,7 @@ typedef uint8_t  EbpfFlags  ;
 	#define S_IFLNK             EBPF_S_IFLNK
 	#define S_IFREG             EBPF_S_IFREG
 	#define S_IXALL             EBPF_S_IXALL
+	#define X_OK                EBPF_X_OK
 	#define X32_SYSCALL_BIT     EBPF_X32_SYSCALL_BIT
 #endif
 
@@ -204,7 +218,7 @@ typedef enum {
 	EBPF_ROOT_ID_UNKNOWN                    // not reported
 ,	EBPF_ROOT_ID_SUPER                      // .
 ,	EBPF_ROOT_ID_EXTERN                     // .
-,	EBPF_ROOT_ID_PROC                       // do not report, but report pid/tid (to interpret self and thread-self)
+,	EBPF_ROOT_ID_PROC                       // not reported, but warn about possible use of /proc/self and /proc/thread-self
 ,	EBPF_ROOT_ID_ABS
 ,	EBPF_ROOT_ID_REPO
 ,	EBPF_ROOT_ID_SRC_DIR                    // >=EBPF_ROOT_ID_SRC_DIR means this represents a source dir
@@ -235,6 +249,7 @@ typedef enum {
 	// path resolution
 ,	EBPF_PATH_RES                 // a symlink has been traversed during path resolution
 	// 1-file accesses
+,	EBPF_NOP                      // a syscall that does nothing : not reported
 ,	EBPF_READ
 ,	EBPF_READDIR
 ,	EBPF_UNLINK                   // may also read
@@ -245,13 +260,14 @@ typedef enum {
 ,	EBPF_EXCHANGE
 	// aliases
 ,	EBPF_HAS_DATA = EBPF_PANIC    // < EBPF_HAS_DATA means event has only hdr
-,	EBPF_ACCESS   = EBPF_PATH_RES // >=EBPF_ACCESS   means event has only hdr
+,	EBPF_ACCESS   = EBPF_PATH_RES // >=EBPF_ACCESS   means disk has been accessed
+,	EBPF_SYSCALL  = EBPF_NOP      // >=EBPF_SYSCALL  means a syscall or io_uring request has been executed
 } EbpfEventKind ;
 
 typedef enum {
 	EBPF_FILE_NONE    // no info        (not emitted)
-,	EBPF_FILE_IGNORE  // file is simple (not emitted)
 ,	EBPF_FILE_USER    // file is not resolved
+,	EBPF_FILE_IGNORE  // file is simple (not emitted)
 ,	EBPF_FILE_NO_FILE // file is not regular nor sym link
 ,	EBPF_FILE_DIR     // file is a dir (only for rename)
 ,	EBPF_FILE_LNK     // file is a sym link

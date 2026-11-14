@@ -20,7 +20,9 @@
 #endif
 
 #include "app.hh"
+#include "disk.hh"
 #include "process.hh"
+#include "time.hh"
 
 #include "record.hh"
 #include "syscall_tab.hh"
@@ -39,7 +41,12 @@ using namespace Disk       ;
 using namespace Time       ;
 using namespace EbpfDaemon ;
 
-static FileInfo _mk_info( EbpfEventHdr const& hdr , ::string const& file={} ) {
+static Pdate _now(EbpfEventHdr const& hdr) {
+	if (hdr.stamp_ns) return Pdate( New , hdr.stamp_ns ) ;
+	else              return        New                  ;
+} ;
+
+FileInfo AutodepEbpf::Consumer::_mk_info( EbpfEventHdr const& hdr , ::string const& file ) {
 	FileTag tag ;
 	switch (hdr.file_kind) {
 		case EBPF_FILE_USER    :                                                  return {file} ; // XXX : ensure file is a dep or we arrive too late (file may have changed since it was accessed)
@@ -52,24 +59,59 @@ static FileInfo _mk_info( EbpfEventHdr const& hdr , ::string const& file={} ) {
 	return { hdr.size , {New,hdr.mtime_ns,tag} } ;
 }
 
-static Pdate _now(EbpfEventHdr const& hdr) {
-	if (hdr.stamp_ns) return Pdate( New , hdr.stamp_ns ) ;
-	else              return        New                  ;
-} ;
-
-void AutodepEbpf::Consumer::handle_event( EbpfEventHdr const& hdr , Path const& path , Path const& dst ) {
-	SWEAR( hdr.kind>=EBPF_ACCESS , hdr.kind ) ;
-	throw_unless(path.root_id==EBPF_ROOT_ID_REPO) ;                                                            // not yet implemented
-	throw_unless(!dst                           ) ;                                                            // .
+::pair_s<bool/*in_repo*/> AutodepEbpf::Consumer::_mk_file( ThreadCtx const& ctx , EbpfEventHdr const& hdr , Path const& path ) {
+	::string file ;
+	FileLoc  loc  ;
 	//
-	::string file     = path.path.substr(1/* / */)                                                    ;
-	Bool3    write    = No | ( (hdr.kind==EBPF_WRITE||hdr.kind==EBPF_UNLINK) && hdr.flags&EBPF_F_OK ) ;
-	Accesses accesses ;
-	if (hdr.flags&EBPF_F_DEP_LNK ) accesses |= Access::Lnk  ;
-	if (hdr.flags&EBPF_F_DEP_REG ) accesses |= Access::Reg  ;
-	if (hdr.flags&EBPF_F_DEP_STAT) accesses |= Access::Stat ;
-	AccessDigest ad { .write=write , .read_dir=hdr.kind==EBPF_READDIR , .accesses=accesses } ;
-	gather->new_access( _now(hdr) , ::move(file) , ad , _mk_info(hdr) , Yes/*late*/ , Comment::None , CommentExt::Link ) ;
+	switch (path.root_id) {
+		case EBPF_ROOT_ID_ABS  : if (+path) file = path.path           ; else file = "/" ; break ;
+		case EBPF_ROOT_ID_REPO : if (+path) file = path.path.substr(1) ; else file = "." ; break ;
+		default :
+			SWEAR( path.root_id>=EBPF_ROOT_ID_SRC_DIR , path.root_id ) ;
+			file << Record::s_autodep_env().src_dirs_s[path.root_id-EBPF_ROOT_ID_SRC_DIR]<<rm_slash<<path.path ;
+	}
+	//
+	if (hdr.flags&EBPF_F_SEEN_LNK) {
+		_rp.tid = ctx.tid_in_ns ;
+		RealPath::SolveReport sr = _rp.solve( file , hdr.flags&EBPF_F_NO_FOLLOW ) ;
+		file = ::move(sr.real    ) ;
+		loc  =        sr.file_loc  ;
+	} else {
+		file = mk_canon(file)      ;
+		loc  = _rpe.file_loc(file) ;
+	}
+	if (loc<=FileLoc::Dep) return { file , loc==FileLoc::Repo } ;
+	else                   return { {}   , false              } ;
+}
+
+void AutodepEbpf::Consumer::init(Gather& g) {
+	_gather = &g                      ;
+	_rpe    = Record::s_autodep_env() ; _rpe.file_sync = FileSync::None ;
+	_rp     = RealPath(_rpe)          ;
+}
+
+void AutodepEbpf::Consumer::handle_event( ThreadCtx const& ctx , EbpfEventHdr const& hdr , Path const& path ) {
+	SWEAR( hdr.kind>=EBPF_HAS_DATA , hdr.kind ) ;
+	throw_if( hdr.kind==EBPF_PANIC , path.path ) ;
+	if (!path.path) return ;
+	//
+	::pair_s<bool/*in_repo*/> file = _mk_file( ctx , hdr , path       ) ; if (!file.first) return ;
+	FileInfo                  fi   = _mk_info(       hdr , file.first ) ;
+	AccessDigest ad   ;
+	if ( hdr.flags&EBPF_F_OK && file.second )
+		switch (hdr.kind) {
+			case EBPF_DST      : throw_if( fi.tag()==FileTag::Dir , "moving dir ",file.first," not implemented yet" ) ; [[fallthrough]] ;
+			case EBPF_WRITE    :
+			case EBPF_UNLINK   :
+			case EBPF_RENAME   :
+			case EBPF_EXCHANGE : ad.write = Yes ; break ;
+			default            : ;
+		}
+	if (hdr.flags&EBPF_F_DEP_LNK ) ad.accesses |= Access::Lnk  ;
+	if (hdr.flags&EBPF_F_DEP_REG ) ad.accesses |= Access::Reg  ;
+	if (hdr.flags&EBPF_F_DEP_STAT) ad.accesses |= Access::Stat ;
+	if (hdr.kind==EBPF_READDIR   ) ad.read_dir  = true         ;
+	_gather->new_access( _now(hdr) , ::move(file.first) , ad , _mk_info(hdr) , Yes/*late*/ ) ;
 }
 
 // runs in the child, just before execve
@@ -79,7 +121,7 @@ int/*rc*/ AutodepEbpf::s_prepare_child(void*) {
 	return 0 ;
 }
 
-AutodepEbpf::AutodepEbpf(Gather& gather) {
+void AutodepEbpf::init(Gather& gather) {
 	for( [[maybe_unused]] int _ : iota(3) ) {
 		if (ring_buf.connect_to_daemon()) goto Connected ;
 		Child ebpfd {
@@ -98,7 +140,11 @@ AutodepEbpf::AutodepEbpf(Gather& gather) {
 	throw "cannot connect to nor launch daemon"s ;
 Connected :
 	ring_buf.init() ;
-	ring_buf.consumer.gather = &gather ;
+	ring_buf.consumer.init(gather) ;
 	//
-	RingBufBase::s_add_root( EBPF_ROOT_ID_REPO , Record::s_autodep_env().repo_root_s ) ;
+	AutodepEnv const& ade = Record::s_autodep_env() ;
+	/**/                                          RingBufBase::s_add_root( EBPF_ROOT_ID_REPO       , ade.repo_root_s                  ) ;
+	/**/                                          RingBufBase::s_add_root( EBPF_ROOT_ID_EXTERN     , ade.repo_root_s+PrivateAdminDirS ) ;
+	/**/                                          RingBufBase::s_add_root( EBPF_ROOT_ID_EXTERN     , ade.tmp_dir_s                    ) ;
+	for( size_t i : iota(ade.src_dirs_s.size()) ) RingBufBase::s_add_root( +EBPF_ROOT_ID_SRC_DIR+i , ade.src_dirs_s[i]                ) ;
 }

@@ -7,7 +7,6 @@
 
 #include "disk.hh"
 
-#include "backdoor.hh"
 #include "ebpf_event.h" // to analyze open flags which is shared with ebpf code
 #include "record.hh"
 
@@ -29,7 +28,6 @@ using namespace Time ;
 //
 
 bool                                        Record::s_static_report          = false   ;
-bool                                        Record::s_enable_was_modified    = false   ;
 ::vmap_s<DepDigest>*                        Record::s_deps                   = nullptr ;
 ::string           *                        Record::s_deps_err               = nullptr ;
 StaticUniqPtr<::umap_s<Record::CacheEntry>> Record::s_access_cache           ;           // map file to read accesses
@@ -103,23 +101,21 @@ Restart :
 	if ( file[pfx_sz-1]!='/') goto ReturnFalse ;                    // false prefix        => not simple
 	//
 	{	int depth = 0 ;
-		for ( const char* p=file+pfx_sz ; *p ; p++ ) {                                                 // ensure we do not escape from top level dir
-			if (p[ 0]!='/')                                continue     ;                              // not a dir boundary, go on
-			if (p[-1]=='/')                                continue     ;                              // consecutive /'s, ignore
-			if (p[-1]!='.') { depth++  ;                   continue     ; }                            // plain dir  , e.g. foo  , go down
-			if (p[-2]=='/')                                continue     ;                              // dot dir    ,             stay still
-			if (p[-2]!='.') { depth++  ;                   continue     ; }                            // plain dir  , e.g. foo. , go down
-			if (p[-3]!='/') { depth++  ;                   continue     ; }                            // plain dir  , e.g. foo.., go down
-			if (!depth    ) { file = p ; special = false ; goto Restart ; }                            // dot-dot dir, restart if we get back to top-level, BACWARD
-			/**/              depth--  ;                                                               // dot-dot dir
+		for ( const char* p=file+pfx_sz ; *p ; p++ ) {                      // ensure we do not escape from top level dir
+			if (p[ 0]!='/')                                continue     ;   // not a dir boundary, go on
+			if (p[-1]=='/')                                continue     ;   // consecutive /'s, ignore
+			if (p[-1]!='.') { depth++  ;                   continue     ; } // plain dir  , e.g. foo  , go down
+			if (p[-2]=='/')                                continue     ;   // dot dir    ,             stay still
+			if (p[-2]!='.') { depth++  ;                   continue     ; } // plain dir  , e.g. foo. , go down
+			if (p[-3]!='/') { depth++  ;                   continue     ; } // plain dir  , e.g. foo.., go down
+			if (!depth    ) { file = p ; special = false ; goto Restart ; } // dot-dot dir, restart if we get back to top-level, BACWARD
+			/**/              depth--  ;                                    // dot-dot dir
 		}
 	}
 ReturnTrue :
 	return special || deps_in_system==No || (deps_in_system==Maybe&&!s_autodep_env(New).deps_in_system) ;
 ReturnFalse :
-	bool is_magic = ::strncmp( file,Backdoor::MagicPfx , sizeof(Backdoor::MagicPfx)-1/*null*/ ) == 0 ;
-	if (is_magic) return false                              ;                                          // magic links can be longer than PATH_MAX
-	else          return ::strnlen(file,PATH_MAX)==PATH_MAX ; // above PATH_MAX, no disk access can succeed, so it is not a dep and this makes sure no unreasonable data access
+	return ::strnlen(file,PATH_MAX)==PATH_MAX ;                             // above PATH_MAX, no disk access can succeed, so it is not a dep and this makes sure no unreasonable data access
 }
 
 Sent Record::_do_send_report(pid_t pid) {
@@ -151,11 +147,10 @@ void Record::_static_report(JobExecRpcReq&& jerr) const {
 	}
 }
 
-void Record::report_direct( JobExecRpcReq&& jerr , bool force ) {
+void Record::report_direct(JobExecRpcReq&& jerr) {
 	jerr.chk() ;
 	//
-	if ( !force && !enable )                                  return ;
-	if ( s_static_report   ) { _static_report(::move(jerr)) ; return ; }
+	if (s_static_report) { _static_report(::move(jerr)) ; return ; }
 	s_mutex.swear_locked() ;
 	//
 	pid_t pid          = ::getpid()       ; if ( +_buf && _buf_pid!=pid ) _buf = {} ;         // if pid's do not match, we are in the child of a fork and _buf must be ignored
@@ -181,9 +176,8 @@ Return :
 	_is_slow = will_be_slow ;
 }
 
-bool/*sent*/ Record::report_cached( JobExecRpcReq&& jerr , bool force ) {
+bool/*sent*/ Record::report_cached( JobExecRpcReq&& jerr) {
 	SWEAR( jerr.proc==Proc::Access , jerr.proc ) ;
-	if ( !force && !enable ) return false/*sent*/ ;
 	if (jerr.sync!=Yes) {
 		switch (jerr.digest.write) {
 			case No : {
@@ -206,13 +200,13 @@ bool/*sent*/ Record::report_cached( JobExecRpcReq&& jerr , bool force ) {
 			break ;
 		DN}
 	}
-	if (+jerr.files) report_direct(::move(jerr),force) ;
+	if (+jerr.files) report_direct(::move(jerr)) ;
 	return +jerr.files ;
 }
 
 JobExecRpcReply Record::report_sync(JobExecRpcReq&& jerr) {
 	Bool3 sync = jerr.sync ;                                      // sample before move
-	report_direct(::move(jerr),true/*force*/) ;
+	report_direct(::move(jerr)) ;
 	send_report() ;
 	if      (sync!=Yes     ) return {}                          ;
 	else if (s_has_server()) return _get_reply()                ;
@@ -227,7 +221,7 @@ JobExecRpcReply Record::report_sync(JobExecRpcReq&& jerr) {
 // - it is then confirmed (with an ok arg to manage errors) after the access
 // in job_exec, if an access is left Maybe, i.e. if job is interrupted between the Maybe reporting and the actual access, disk is interrogated to see if access did occur
 //
-JobExecRpcReq::Id Record::report_access( JobExecRpcReq&& jerr , bool force ) {
+JobExecRpcReq::Id Record::report_access(JobExecRpcReq&& jerr) {
 	using Jerr = JobExecRpcReq ;
 	// auto-generated id must be different for all accesses (could be random)
 	// if _real_path.pid is not 0, we are ptracing, pid is meaningless but we are single thread and dates are different
@@ -238,7 +232,7 @@ JobExecRpcReq::Id Record::report_access( JobExecRpcReq&& jerr , bool force ) {
 	bool        may_write = jerr.digest.write==Maybe        ;
 	bool        need_id   = !id && may_write && +jerr.files ;
 	static_assert(sizeof(Jerr::Id)==8) ;                                                                                                          // else, rework shifting
-	if      (need_id   ) { now = New ; id = now.val() ; if (!_real_path.pid) id += Jerr::Id(::getpid())*((uint64_t(1)<<48)+(uint64_t(1)<<32)) ; } // .
+	if      (need_id   ) { now = New ; id = now.val() ; if (!_real_path.tid) id += Jerr::Id(::getpid())*((uint64_t(1)<<48)+(uint64_t(1)<<32)) ; } // .
 	else if (!jerr.date)   now = New ;
 	//
 	/**/                                                                 jerr.proc = JobExecProc::Access    ;
@@ -246,31 +240,31 @@ JobExecRpcReq::Id Record::report_access( JobExecRpcReq&& jerr , bool force ) {
 	if (need_id              )                                           jerr.id   = id                     ;
 	if (+jerr.digest.accesses) for( auto& [f,fi] : jerr.files ) if (!fi) fi        = {{s_repo_root_fd(),f}} ;
 	//
-	bool sent = report_cached( ::move(jerr) , force ) ;
+	bool sent = report_cached(::move(jerr)) ;
 	if ( sent && may_write ) return id ;
 	else                     return 0  ;
 }
 
-JobExecRpcReq::Id Record::report_access( FileLoc fl , JobExecRpcReq&& jerr , bool force ) {
+JobExecRpcReq::Id Record::report_access( FileLoc fl , JobExecRpcReq&& jerr ) {
 	SWEAR( jerr.files.size()==1 , jerr ) ;
 	if (fl>FileLoc::Dep ) return 0 ;
 	if (fl>FileLoc::Repo) jerr.digest.write = No ;
-	return report_access( ::move(jerr) , force ) ;
+	return report_access(::move(jerr)) ;
 }
 
 // if f0 is not empty, write is done to f0 rather than to jerr.file
-JobExecRpcReq::Id Record::report_access( FileLoc fl , JobExecRpcReq&& jerr , FileLoc fl0 , ::string const& f0 , bool force ) {
+JobExecRpcReq::Id Record::report_access( FileLoc fl , JobExecRpcReq&& jerr , FileLoc fl0 , ::string const& f0 ) {
 	SWEAR( jerr.files.size()==1 , jerr ) ;
 	if (+f0) {
 		if (!jerr.date) jerr.date = New ; // ensure read and write dates are identical
 		// read part
 		JobExecRpcReq read_jerr = jerr ; read_jerr.digest.write = No ;
-		report_access( fl , ::move(read_jerr) , force ) ;
+		report_access( fl , ::move(read_jerr) ) ;
 		// write part
 		fl                  = fl0 ;
 		jerr.files[0].first = f0  ;
 	}
-	return report_access( fl , ::move(jerr) , force ) ;
+	return report_access( fl , ::move(jerr) ) ;
 }
 
 Record::Chdir::Chdir( Record& r , Path&& path , Comment c ) : Solve<>{r,::move(path),false/*no_follow*/,false/*read*/,c} {
@@ -370,26 +364,9 @@ Record::Open::Open( Record& r , Path&& path , int flags , Comment c ) : SolveMod
 	send_report(r) ;
 }
 
-Record::Readlink::Readlink( Record& r , Path&& path , char* buf_ , size_t sz_ , Comment c ) : Solve<>{r,::move(path),true/*no_follow*/,true/*read*/,c} , buf{buf_} , sz{sz_} {
-	magic = at==Backdoor::MagicFd && ::strncmp(file,Backdoor::MagicPfx,Backdoor::MagicPfxLen)==0 ;
+Record::Readlink::Readlink( Record& r , Path&& path , Comment c ) : Solve<>{r,::move(path),true/*no_follow*/,true/*read*/,c} {
 	report_dep( r , Access::Lnk , c ) ;
 	send_report(r) ;
-}
-
-ssize_t Record::Readlink::operator()( Record& r , ssize_t len ) {
-	/**/                                                                            if (!magic            ) return len                    ;
-	::string                        cmd      = file+Backdoor::MagicPfxLen         ;
-	size_t                          slash    = cmd.find('/')                      ; if (slash==Npos       ) return -+MagicErrno::Internal ;
-	::umap_s<Backdoor::Func> const& func_tab = Backdoor::get_func_tab()           ;
-	auto                            it       = func_tab.find(cmd.substr(0,slash)) ; if (it==func_tab.end()) return -+MagicErrno::NotFound ;
-	//
-	char* b = buf ? buf : new char[sz] ;
-	len = it->second( r , cmd.substr(slash+1) , b , sz ) ; SWEAR( len<=ssize_t(sz) , len,sz ) ;
-	if      (buf   ) {}                                                                         // buf is provided by caller
-	else if (len>=0) buf = b ;                                                                  // buf will be deleted by caller if allocated here
-	else             delete[] b ;
-	//
-	return len ;                                                                                // len contains -errno
 }
 
 Record::Rename::Rename( Record& r , Path&& src_ , Path&& dst_ , bool exchange , bool no_replace , Comment c ) :

@@ -7,7 +7,7 @@
 
 #include "utils.hh"
 
-inline bool started() { return true ; }
+inline bool active() { return true ; }
 
 void* get_orig(const char* libcall) {
 	void* res = ::dlsym(RTLD_NEXT,libcall) ;

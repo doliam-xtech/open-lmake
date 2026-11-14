@@ -25,8 +25,6 @@
 	X( getdents64        , READDIR   , -1 ,-1   , -1 ,-1   ,  0 , -1 , -1  , -1 , EBPF_SC_MAY_NO_FOLLOW ) \
 	X( link              , LINK      , -1 , 0   , -1 , 1   , -1 , -1 , -1  , -1 , 0                     ) \
 	X( linkat            , LINK      ,  0 , 1   ,  2 , 3   , -1 , -1 ,  4  , -1 , EBPF_SC_MAY_FOLLOW    ) \
-	X( mkdir             , SENSE     , -1 , 0   , -1 ,-1   , -1 , -1 , -1  , -1 , 1                     ) \
-	X( mkdirat           , SENSE     ,  0 , 1   , -1 ,-1   , -1 , -1 , -1  , -1 , 1                     ) \
 	X( mknod             , CREATE    , -1 , 0   , -1 ,-1   , -1 ,  1 , -1  , -1 , 1                     ) \
 	X( mknodat           , CREATE    ,  0 , 1   , -1 ,-1   , -1 ,  2 , -1  , -1 , 1                     ) \
 	X( mount             , FORBIDDEN , -1 , 1   , -1 ,-1   , -1 , -1 , -1  , -1 , EBPF_SC_MAY_NO_FOLLOW ) \
@@ -43,7 +41,6 @@
 	X( rename            , RENAME    , -1 , 0   , -1 , 1   , -1 , -1 , -1  , -1 , 1                     ) \
 	X( renameat          , RENAME    ,  0 , 1   ,  2 , 3   , -1 , -1 , -1  , -1 , 1                     ) \
 	X( renameat2         , RENAME    ,  0 , 1   ,  2 , 3   , -1 , -1 ,  3  , -1 , 1                     ) \
-	X( rmdir             , PATH      , -1 , 0   , -1 ,-1   , -1 , -1 , -1  , -1 , 1                     ) \
 	X( stat              , STAT      , -1 , 0   , -1 ,-1   , -1 , -1 , -1  , -1 , 0                     ) \
 	X( stat64            , STAT      , -1 , 0   , -1 ,-1   , -1 , -1 , -1  , -1 , 0                     ) \
 	X( fstatat64         , STAT      ,  0 , 1   , -1 ,-1   , -1 , -1 ,  3  , -1 , EBPF_SC_MAY_NO_FOLLOW ) \
@@ -68,35 +65,19 @@
 // syscalls of SyscallDescr::s_tab that need no tracking with ebpf : cwd is captured when needed and io_uring are not forbidden (its operations are tracked)
 #define EBPF_UNTRACKED_SYSCALLS(X) \
 	X(fchdir           ) \
+	X(getxattr         ) \
 	X(io_uring_enter   ) \
 	X(io_uring_register) \
-	X(io_uring_setup   )
+	X(io_uring_setup   ) \
+	X(lgetxattr        ) \
+	X(listxattr        ) \
+	X(llistxattr       ) \
+	X(lremovexattr     ) \
+	X(lsetxattr        ) \
+	X(mkdir            ) \
+	X(mkdirat          ) \
+	X(removexattr      ) \
+	X(rmdir            ) \
+	X(setxattr         )
 
 #endif
-
-#define IS_SYSTEM_PFX_FUNC( func_pfx , func_name ) \
-	func_pfx uint16_t func_name##_match( const char* pfx , const char* ref ) {          \
-		for( uint16_t i=0 ;; i++ ) {                                                    \
-			char p_ = pfx[i] ;                                                          \
-			char r_ = ref[i] ;                                                          \
-			if      (!r_   ) return p_==0||p_=='/' ? i : 0 ;                            \
-			else if (p_!=r_) return 0                      ;                            \
-		}                                                                               \
-	}                                                                                   \
-	func_pfx uint16_t func_name(const char* pfx) {                                      \
-		uint16_t pfx_len = 0 ;                                                          \
-		switch (*pfx) {                                                                 \
-			case 'b' : pfx_len = func_name##_match(pfx,"bin"   ) ;              break ; \
-			case 'e' : pfx_len = func_name##_match(pfx,"etc"   ) ;              break ; \
-			case 'l' : pfx_len = func_name##_match(pfx,"lib"   ) ; if (pfx_len) break ; \
-			/**/       pfx_len = func_name##_match(pfx,"lib32" ) ; if (pfx_len) break ; \
-			/**/       pfx_len = func_name##_match(pfx,"lib64" ) ; if (pfx_len) break ; \
-			/**/       pfx_len = func_name##_match(pfx,"libx32") ;              break ; \
-			case 'o' : pfx_len = func_name##_match(pfx,"opt"   ) ;              break ; \
-			case 's' : pfx_len = func_name##_match(pfx,"sbin"  ) ;              break ; \
-			case 'u' : pfx_len = func_name##_match(pfx,"usr"   ) ;              break ; \
-			case 'v' : pfx_len = func_name##_match(pfx,"var"   ) ;              break ; \
-			default  : ;                                                                \
-		}                                                                               \
-		return pfx_len ;                                                                \
-	}

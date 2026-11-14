@@ -859,7 +859,7 @@ namespace Engine {
 		if (FileInfo(Codec::CodecFile::s_dir_s(file->name())+"new_codes").tag()==FileTag::Dir) _submit_codec(req) ;
 	}
 
-	// /!\ this function must stay in sync with Decode::process and Encode::process in backdoor.cc
+	// /!\ this function must stay in sync with JobSupport::decode and JobSupport::decode in autodep/job_support.cc
 	template<bool Encode> static void _create( Codec::CodecFile const& codec_file , ::string const& code_val , Job job , bool tmp , SyncGuard* sync_guard ) {
 		using namespace Codec ;
 		//

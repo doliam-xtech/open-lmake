@@ -87,12 +87,14 @@ struct SyscallDescr {
 ,	LIBCALL_ENTRY(access                ) \
 ,	LIBCALL_ENTRY(canonicalize_file_name) \
 ,	LIBCALL_ENTRY(faccessat             ) \
+,	LIBCALL_ENTRY(mkdir                 ) \
 ,	LIBCALL_ENTRY(mkdirat               ) \
 ,	LIBCALL_ENTRY(mknod                 ) \
 ,	LIBCALL_ENTRY(mknodat               ) \
 ,	LIBCALL_ENTRY(opendir               ) \
 ,	LIBCALL_ENTRY(realpath              ) \
 ,	LIBCALL_ENTRY(__realpath_chk        ) \
+,	LIBCALL_ENTRY(rmdir                 ) \
 ,	LIBCALL_ENTRY(scandir               ) \
 ,	LIBCALL_ENTRY(scandirat             ) \
 ,	LIBCALL_ENTRY(scandir64             ) \
@@ -145,6 +147,17 @@ struct SyscallDescr {
 ,	LIBCALL_ENTRY(readdir_r      ) \
 ,	LIBCALL_ENTRY(readdir64_r    )
 
+// XXX : find a way to reliably implement xattr tracking
+#define ENUMERATE_XATTR_LIBCALLS
+//,	LIBCALL_ENTRY(getxattr    )
+//,	LIBCALL_ENTRY(lgetxattr   )
+//,	LIBCALL_ENTRY(listxattr   )
+//,	LIBCALL_ENTRY(llistxattr  )
+//,	LIBCALL_ENTRY(removexattr )
+//,	LIBCALL_ENTRY(lremovexattr)
+//,	LIBCALL_ENTRY(setxattr    )
+//,	LIBCALL_ENTRY(lsetxattr   )
+
 #define ENUMERATE_LIBCALLS \
 	LIBCALL_ENTRY(chdir           ) \
 ,	LIBCALL_ENTRY(chmod           ) \
@@ -175,7 +188,6 @@ struct SyscallDescr {
 ,	LIBCALL_ENTRY(link            ) \
 ,	LIBCALL_ENTRY(linkat          ) \
 ,	LIBCALL_ENTRY(lutimes         ) \
-,	LIBCALL_ENTRY(mkdir           ) /* necessary against NFS strange notion of coherence as this touches containing dir */ \
 ,	LIBCALL_ENTRY(mkostemp        ) \
 ,	LIBCALL_ENTRY(mkostemps       ) \
 ,	LIBCALL_ENTRY(mkstemp         ) \
@@ -194,7 +206,6 @@ struct SyscallDescr {
 ,	LIBCALL_ENTRY(rename          ) \
 ,	LIBCALL_ENTRY(renameat        ) \
 ,	LIBCALL_ENTRY(renameat2       ) \
-,	LIBCALL_ENTRY(rmdir           ) /* necessary against NFS strange notion of coherence as this touches containing dir */ \
 ,	LIBCALL_ENTRY(symlink         ) \
 ,	LIBCALL_ENTRY(symlinkat       ) \
 ,	LIBCALL_ENTRY(syscall         ) \
@@ -226,4 +237,5 @@ struct SyscallDescr {
 	ENUMERATE_CLOSE_RANGE_LIBCALLS \
 	ENUMERATE_MOVE_MOUNT_LIBCALLS  \
 	ENUMERATE_OPEN_TREE_LIBCALLS   \
-	ENUMERATE_DIR_LIBCALLS
+	ENUMERATE_DIR_LIBCALLS         \
+	ENUMERATE_XATTR_LIBCALLS

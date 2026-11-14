@@ -22,6 +22,10 @@ using namespace ::string_literals ;
 
 namespace EbpfDaemon {
 
+	static void _magic_req( EbpfMagicReq const& req , ::string const& name={} ) {
+		int rc = ::symlinkat( reinterpret_cast<const char*>(&req) , EBPF_MAGIC_FD , name.c_str() ) ; (void) rc ;
+	}
+
 	struct Fnv {                                                // easy, fast and good enough
 		// cf https://en.wikipedia.org/wiki/Fowler%E2%80%93Noll%E2%80%93Vo_hash_function
 		static constexpr uint64_t Offset = 0xcbf29ce484222325 ; // value for 32-bit checksum : 0x811c9dc5 ;
@@ -91,20 +95,20 @@ namespace EbpfDaemon {
 		req.proc   = EBPF_MAGIC_REGISTER ;
 		req.mrkr   = g_mrkr              ;
 		req.job_id = job_id              ;
-		::fsetxattr( EBPF_MAGIC_FD , nullptr/*name*/ , &req , sizeof(req) , 0/*flags*/ ) ;
+		_magic_req(req) ;
 		s_add_root( EBPF_ROOT_ID_PROC , "/proc" ) ;
 		_registered = true ;
 	}
 
 	RingBufBase::~RingBufBase() {
-		/**/               ::close(_ring_buf_fd) ;
-		if (_daemon_fd>=0) ::close(_daemon_fd  ) ;
+		if (_ring_buf_fd>=0) ::close(_ring_buf_fd) ;
+		if (_daemon_fd  >=0) ::close(_daemon_fd  ) ;
 	}
 
 	// /!\ this function must be malloc free as it may be called in preexec_func during a fork
 	void RingBufBase::s_start_job() {
 		EbpfMagicReq req {} ; req.proc = EBPF_MAGIC_JOB ;
-		::fsetxattr( EBPF_MAGIC_FD , nullptr/*name*/ , &req , sizeof(req) , 0/*flags*/ ) ;
+		_magic_req(req) ;
 	}
 
 	Path::Path( EbpfRootId ri , ::string_view data ) : root_id{ri} {
@@ -117,19 +121,21 @@ namespace EbpfDaemon {
 		}
 	}
 
-	void RingBufBase::s_add_root( EbpfRootId root_id , ::string const& root ) {                                                        // empty means /
-		const char*  r   = root.empty() ? "/" : root.c_str() ; if (r[0]!='/') throw "cannot add relative root"s ;
+	void RingBufBase::s_add_root( EbpfRootId root_id , ::string const& root ) {
+		if (!root.empty()) {
+			if (root[0]!='/'    ) throw "cannot add relative root"s ;
+			if (root.back()=='/') return s_add_root( root_id , root.substr(0,root.size()-1) ) ;
+		}
 		EbpfMagicReq req ;
-		req.proc    = EBPF_MAGIC_ROOT           ;
-		req.root_id = root_id                   ;
-		req.fd      = ::open( r , O_DIRECTORY ) ; ; if (req.fd<0     ) throw ::format("cannot add (%s) root {}",::strerror(errno),r) ; // dont close to maintain its dentry live in kernel
-		::fsetxattr( EBPF_MAGIC_FD , root.c_str() , &req , sizeof(req) , 0/*flags*/ ) ;
-		if (root_id!=EBPF_ROOT_ID_EXTERN)
-			for( ::string d=root ; !d.empty() ; d=d.substr(0,d.rfind('/')) ) {                                                         // super-dir of root dirs must be registered as well
-				req.root_id = EBPF_ROOT_ID_SUPER                ;
-				req.fd      = ::open( d.c_str() , O_DIRECTORY ) ;                                                                      // dont close to maintain its dentry live in kernel
-				::fsetxattr( EBPF_MAGIC_FD , root.c_str() , &req , sizeof(req) , 0/*flags*/ ) ;
-			}
+		req.proc    = EBPF_MAGIC_ROOT ;
+		req.root_id = root_id         ;
+		for( ::string d=root ;; d=d.substr(0,d.rfind('/')) ) {                           // super-dir of root dirs must be registered as well
+			req.fd = ::open( d.empty()?"/":d.c_str() , O_DIRECTORY ) ;                   // dont close to maintain its dentry live in kernel
+			_magic_req( req , d ) ;
+			if ( root_id!=EBPF_ROOT_ID_SUPER && root_id<EBPF_ROOT_ID_PLAIN ) break ;
+			if ( d.empty()                                                 ) break ;
+			req.root_id = EBPF_ROOT_ID_SUPER ;
+		}
 	}
 
 }

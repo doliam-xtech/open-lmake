@@ -504,17 +504,17 @@ src/store/big_test.dir/tok : src/store/big_test.py LMAKE
 	@$(LINT) $< $(LINT_OPTS) -- $(LINT_FLAGS) $(PY_CC_FLAGS) $(CC_FLAGS) >$@.err 2>$@.stderr
 	@if [ -s $@.err ] ; then echo errors in $@.err ; cat $@.stderr ; else >$@ ; fi
 
-# ebpf autodep method : the BPF program is compiled by clang to a BPF object, from which bpftool generates a C skeleton included by ebpf.cc
+# ebpf autodep method : the ebpf program is compiled by clang to a ebpf object, from which bpftool generates a C skeleton included by ebpf.cc
 ifeq ($(HAS_EBPF),1)
 src/autodep/vmlinux.h :
 	@echo generate $@
 	@$(BPFTOOL) btf dump file /sys/kernel/btf/vmlinux format c >$@
 src/autodep/ebpf.bpf.o : src/autodep/ebpf.bpf.c src/autodep/ebpf_event.h src/autodep/vmlinux.h
-	@echo $(BPF_CLANG) -target bpf to $@
-	@$(BPF_CLANG) -g -O3 -target bpf -D__TARGET_ARCH_$(BPF_ARCH) -iquote . -iquote src/autodep -I $(BPF_INC_DIR) -c -o $@ $<
+	@echo $(EBPF_CLANG) -target bpf to $@
+	@$(EBPF_CLANG) -g -O3 -Werror -target bpf -DTARGET_ARCH_$$(uname -m) -iquote . -iquote src/autodep -I $(EBPF_INC_DIR) -c -o $@ $<
 src/autodep/ebpf.bpf.i : src/autodep/ebpf.bpf.c src/autodep/ebpf_event.h src/autodep/vmlinux.h
-	@echo $(BPF_CLANG) -target bpf to $@
-	@$(BPF_CLANG) -D__TARGET_ARCH_$(BPF_ARCH) -iquote . -iquote src/autodep -I $(BPF_INC_DIR) -E -o $@ $<
+	@echo $(EBPF_CLANG) -target bpf to $@
+	@$(EBPF_CLANG) -Werror -DTARGET_ARCH_$$(uname -m) -iquote . -iquote src/autodep -I $(EBPF_INC_DIR) -E -o $@ $<
 src/autodep/ebpf.skel.h : src/autodep/ebpf.bpf.o
 	@echo generate skeleton to $@
 	@$(BPFTOOL) gen skeleton $< name ebpf >$@
@@ -626,7 +626,6 @@ SERVER_SAN_OBJS := \
 	$(SERVER_COMMON_SAN_OBJS)                            \
 	src/non_portable$(SAN).o                             \
 	src/rpc_client$(SAN).o                               \
-	src/autodep/backdoor$(SAN).o                         \
 	src/autodep/gather$(SAN).o                           \
 	src/autodep/ld_server$(SAN).o                        \
 	src/autodep/ptrace$(SAN).o                           \
@@ -739,7 +738,6 @@ BASIC_REMOTE_OBJS := \
 	$(LMAKE_BASIC_OBJS)    \
 	src/re.o               \
 	src/rpc_job_exec.o     \
-	src/autodep/backdoor.o \
 	src/autodep/env.o      \
 	src/autodep/record.o
 

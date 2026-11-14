@@ -72,7 +72,7 @@ void RealPath::SolveReport::operator>>(::string& os) const {    // START_OF_NO_C
 
 void RealPath::operator>>(::string& os) const {             // START_OF_NO_COV
 	/**/                  os << "RealPath("               ;
-	if (+pid            ) os <<       pid           <<',' ;
+	if (+tid            ) os <<       tid           <<',' ;
 	/**/                  os <<      _cwd                 ;
 	if (+_abs_src_dirs_s) os << ','<<_abs_src_dirs_s      ;
 	/**/                  os << ')'                       ;
@@ -95,7 +95,7 @@ void RealPath::_Dvg::update( ::string_view domain_s , ::string const& chk ) {
 	if (ds<chk.size()) ok = chk[ds]=='/' ;
 }
 
-RealPath::RealPath( RealPathEnv const& rpe , pid_t p ) : pid{p} , _env{&rpe} , _repo_root_sz{_env->repo_root_s.size()} , _nfs_guard{rpe.file_sync} {
+RealPath::RealPath( RealPathEnv const& rpe , pid_t p ) : tid{p} , _env{&rpe} , _repo_root_sz{_env->repo_root_s.size()} , _nfs_guard{rpe.file_sync} {
 	/**/                SWEAR( is_abs(rpe.repo_root_s) , rpe.repo_root_s ) ;
 	if (+rpe.tmp_dir_s) SWEAR( is_abs(rpe.tmp_dir_s  ) , rpe.tmp_dir_s   ) ;
 	//
@@ -127,10 +127,10 @@ RealPath::SolveReport RealPath::solve( FileView file , bool no_follow ) {
 	size_t      pos           = is_abs(file.file) ;
 	if (!pos) {                                                           // file is relative, meaning relative to at
 		if (file.at==Fd::Cwd) {
-			if (pid) real = read_lnk(cat("/proc/",pid,"/cwd")) ;
+			if (tid) real = read_lnk(cat("/proc/",tid,"/cwd")) ;
 			else     real = cwd()                              ;
 		} else {
-			if (pid) real = read_lnk(cat("/proc/",pid,"/fd/",file.at.fd)) ;
+			if (tid) real = read_lnk(cat("/proc/",tid,"/fd/",file.at.fd)) ;
 			else     real = read_lnk(cat("/proc/self/fd/"   ,file.at.fd)) ;
 		}
 		// if eBPF is used, the process could have ended, but in that case, the syscall result could not have been observed
@@ -185,8 +185,10 @@ RealPath::SolveReport RealPath::solve( FileView file , bool no_follow ) {
 			case LnkSupport::File : if (!last) continue ;                 // only handle sym links as last component
 		DN}                                                               // NO_COV
 	HandleLnk :
-		::string& nxt = local_file[ping] ;                                // bounce, initially, when file is neither local_file's, any buffer is ok
-		nxt = read_lnk( real , &_nfs_guard ) ;
+		::string& nxt = local_file[ping] ;                                                             // bounce, initially, when file is neither local_file's, any buffer is ok
+		if      ( +in_proc && tid && real=="/proc/self"       ) nxt = cat("/proc/",tid             ) ;
+		else if ( +in_proc && tid && real=="/proc/thread-self") nxt = cat("/proc/",tid,"/task/",tid) ;
+		else                                                    nxt = read_lnk( real , &_nfs_guard ) ;
 		if (!nxt) {
 			if (errno==ENOENT) exists = false ;
 			// do not generate dep for intermediate dir that are not links as we indirectly depend on them through the last components
@@ -259,6 +261,6 @@ RealPath::SolveReport RealPath::solve( FileView file , bool no_follow ) {
 }
 
 void RealPath::chdir() {
-	if (pid)   _cwd = read_lnk(cat("/proc/",pid,"/cwd")) ;
+	if (tid)   _cwd = read_lnk(cat("/proc/",tid,"/cwd")) ;
 	else     { _cwd = no_slash(cwd_s())                  ; _cwd_pid = ::getpid() ; }
 }

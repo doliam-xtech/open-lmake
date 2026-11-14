@@ -89,7 +89,6 @@ void AutodepEnv::operator>>(::string& os) const {                               
 	if (+fast_report_pipe) os << ','<<fast_report_pipe                                ;
 	/**/                   os << ','<<service                                         ;
 	if (+fqdn            ) os << ','<<fqdn                                            ;
-	if ( disabled        ) os << ",disabled"                                          ;
 	if ( auto_mkdir      ) os << ",auto_mkdir"                                        ;
 	if ( ext_read_ok     ) os << ",external_read_ok"                                  ;
 	if ( ext_write_ok    ) os << ",external_write_ok"                                 ;
@@ -125,7 +124,6 @@ AutodepEnv::AutodepEnv( ::string const& env ) {
 	if (env[pos++]!=':') goto Fail ;
 	for( ; env[pos]!=':' ; pos++ )
 		switch (env[pos]) {
-			case 'd' : disabled        = true ; break ;
 			case 'D' : readdir_ok      = true ; break ;
 			case 'i' : ignore_stat     = true ; break ;
 			case 'I' : io_uring_ok     = true ; break ;
@@ -186,10 +184,8 @@ AutodepEnv::operator ::string() const {
 	res <<':'<< '"'<<mk_printable<'"'>(fast_mail       )<<'"' ;
 	res <<':'<< '"'<<mk_printable<'"'>(fast_report_pipe)<<'"' ;
 	// options
-	// START_OF_VERSIONING CACHE REPO JOB
 	res << ':' ;
 	if (auto_mkdir     ) res << 'm' ;
-	if (disabled       ) res << 'd' ;
 	if (readdir_ok     ) res << 'D' ;
 	if (ignore_stat    ) res << 'i' ;
 	if (io_uring_ok    ) res << 'I' ;
@@ -223,7 +219,6 @@ AutodepEnv::operator ::string() const {
 	res <<':'<<      mk_printable     (                  src_dirs_s  ,false )      ;
 	res <<':'<<      mk_printable     (mk_vmap<::string>(codecs     ),false )      ;
 	res <<':'<<      mk_printable     (                  views_s     ,false )      ;
-	// END_OF_VERSIONING
 	return res ;
 }
 

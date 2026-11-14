@@ -5,7 +5,7 @@
 
 // Root daemon for the ebpf autodep method.
 // It loads and attaches the BPF programs ONCE (so every syscall on the machine traverses a single program set), then serves unprivileged job clients
-// (job_exec / lautodep) over a unix socket : each client gets a private per-job ring buffer (fd passed via SCM_RIGHTS) into which the kernel routes that
+// (job_exec/lautodep) over a unix socket : each client gets a private per-job ring buffer (fd passed via SCM_RIGHTS) into which the kernel routes that
 // job's file-access events. The clients themselves never touch bpf() and need no privileges.
 //
 // The hooks used by the BPF programs are not all guaranteed interfaces (some may be inlined, renamed or have their signature changed from kernel to kernel).
@@ -15,12 +15,7 @@
 // Each client is served by its own thread : registering and releasing a ring buffer in the kernel implies waiting for a rcu grace period (tens of ms),
 // which must not be serialized among jobs.
 //
-// This is a standalone program (it deliberately avoids the lmake app framework) : build it, then run it as root, e.g. : sudo _bin/lmake_ebpfd
-// options :
-//   --test    : run the self-test verbosely (events are dumped) and exit
-//   --no-test : skip the self-test (for debug only)
-
-// do not include "utils.hh" nor any other lmake .hh so as to keep ebpf daemon very simple to analyze
+// This is a standalone program (it deliberately avoids the lmake app framework) so as to be easily audited as it runs suid root.
 
 #include <sys/syscall.h>
 
@@ -79,7 +74,7 @@ static constexpr time_t   HelloTimeout = 10 ; // in seconds, a client must not b
 static struct ebpf* _g_skel         = nullptr ;
 static int          _g_ring_bufs_fd = -1      ;
 
-// use constexpr processing rather than #ifdef/#endif so as to discriminate between defined/undefined macros on a single line
+// use constexpr processing rather than                                          #ifdef/#endif so as to discriminate between defined/undefined macros on a single line
 template<::integral I,I DfltVal> consteval I _macro_val_str(const char* n_str) {
 	I    n      = 0     ;
 	bool is_neg = false ;
@@ -142,20 +137,18 @@ static constexpr bool SyscallsOk = []() {
 	// tracked syscalls
 	#define X(   name , kind , d1,p1 , d2,p2 , fd,mod,fl,msk,nf ) if ( long nr=MACRO_VAL(SYS_##name  ,-1L) ; nr>=0 ) ok &= ulong(nr)<NSyscalls ;
 	#define X32( name , kind , d1,p1 , d2,p2 , fd,mod,fl,msk,nf ) if ( long nr=MACRO_VAL(SYS32_##name,-1L) ; nr>=0 ) ok &= ulong(nr)<NSyscalls ;
-	EBPF_TRACKED_SYSCALLS(X)
+	#define Y(   name                                           ) if ( long nr=MACRO_VAL(SYS_##name  ,-1L) ; nr>=0 ) ok &= ulong(nr)<NSyscalls ;
+	#define Y32( name                                           ) if ( long nr=MACRO_VAL(SYS32_##name,-1L) ; nr>=0 ) ok &= ulong(nr)<NSyscalls ;
+	EBPF_TRACKED_SYSCALLS  (X)
+	EBPF_UNTRACKED_SYSCALLS(Y)
 	#if HAS_32
-		EBPF_TRACKED_SYSCALLS(X32)
+		EBPF_TRACKED_SYSCALLS  (X32)
+		EBPF_UNTRACKED_SYSCALLS(Y32)
 	#endif
 	#undef X
+	#undef Y
 	#undef X32
-	#define X(  name) if ( long nr=MACRO_VAL(SYS_##name  ,-1L) ; nr>=0 ) ok &= ulong(nr)<NSyscalls ;
-	#define X32(name) if ( long nr=MACRO_VAL(SYS32_##name,-1L) ; nr>=0 ) ok &= ulong(nr)<NSyscalls ;
-	EBPF_UNTRACKED_SYSCALLS(X)
-	#if HAS_32
-		EBPF_UNTRACKED_SYSCALLS(X32)
-	#endif
-	#undef X
-	#undef X32
+	#undef Y32
 	return ok ;
 } () ;
 static_assert( SyscallsOk ) ;
@@ -165,12 +158,18 @@ static constexpr ::array<::array<EbpfScEntry,NSyscalls>,1+HAS_32> Syscalls = [](
 	// tracked syscalls
 	#define X(  name,kind,d1,p1,d2,p2,fd,mod,fl,msk,nf) if ( long nr=MACRO_VAL(SYS_##name  ,-1L) ; nr>=0 ) res[0][nr] = EBPF_SCE(kind,d1,p1,d2,p2,fd,mod,fl,msk,nf) ;
 	#define X32(name,kind,d1,p1,d2,p2,fd,mod,fl,msk,nf) if ( long nr=MACRO_VAL(SYS32_##name,-1L) ; nr>=0 ) res[1][nr] = EBPF_SCE(kind,d1,p1,d2,p2,fd,mod,fl,msk,nf) ;
-	EBPF_TRACKED_SYSCALLS(X)
+	#define Y(  name                                  ) if ( long nr=MACRO_VAL(SYS_##name  ,-1L) ; nr>=0 ) res[0][nr] = EBPF_SCE(NONE,-1,-1,-1,-1,-1,-1 ,-1,-1 ,-1) ;
+	#define Y32(name                                  ) if ( long nr=MACRO_VAL(SYS32_##name,-1L) ; nr>=0 ) res[1][nr] = EBPF_SCE(NONE,-1,-1,-1,-1,-1,-1 ,-1,-1 ,-1) ;
+	EBPF_TRACKED_SYSCALLS  (X)
+	EBPF_UNTRACKED_SYSCALLS(Y)
 	#if HAS_32
-		EBPF_TRACKED_SYSCALLS(X32)
+		EBPF_TRACKED_SYSCALLS  (X32)
+		EBPF_UNTRACKED_SYSCALLS(Y32)
 	#endif
 	#undef X
+	#undef Y
 	#undef X32
+	#undef Y32
 	return res ;
 } () ;
 
@@ -230,8 +229,10 @@ struct Job {
 		uint32_t job_id_32 = job_id ;
 		if (ring_buf_fd<0                                                                    ) throw ::format("job {} : cannot create ring buffer",job_id) ;
 		if (::bpf_map_update_elem( _g_ring_bufs_fd , &job_id_32 , &ring_buf_fd , BPF_ANY )!=0) throw ::format("job {} : cannot register"          ,job_id) ;
+log("new job id : %d",job_id) ;
 	}
 	~Job() {
+log("exit job id : %d",job_id) ;
 		uint32_t job_id_32  = job_id ;
 		if (::bpf_map_delete_elem( _g_ring_bufs_fd , &job_id_32 )!=0) log_errno(::format("job {} : cannot unregister",job_id).c_str()) ; // cannot throw in dxtor
 		if (ring_buf_fd>=0) ::close(ring_buf_fd) ;
@@ -265,7 +266,7 @@ struct Job {
 ::set<EbpfJobId> Job::s_free_ids ;
 
 static int _pr( enum libbpf_print_level lvl , const char* fmt , va_list ap ) {
-	if (lvl>LIBBPF_WARN)                                                       return 0 ;   // higher lvl means less critical
+	if (lvl>LIBBPF_WARN)                                                       return 0 ;                                                    // higher lvl means less critical
 	else                 { vlog(false/*with_errno*/,false/*with_nl*/,fmt,ap) ; return 1 ; }
 }
 static void _load_ebpf() {
@@ -379,12 +380,16 @@ int main( int argc , char* argv[] ) {
 //
 
 struct Consumer {
-	void handle_event( EbpfEventHdr const& hdr , Path const& /*file*/ , Path const& /*dst*/={} ) {
-		if (hdr.file_kind==EBPF_FILE_USER) n_unsolved++ ; else n_solved++ ;
+	void handle_event( ThreadCtx const& , EbpfEventHdr const& hdr , Path const& ) {
+		if      (hdr.kind< EBPF_HAS_DATA      ) {}
+		else if (hdr.kind==EBPF_PANIC         ) n_panic++    ;
+		else if (hdr.file_kind==EBPF_FILE_USER) n_unsolved++ ;
+		else                                    n_solved++   ;
 	}
 	// data
 	int n_solved   = 0 ;
 	int n_unsolved = 0 ;
+	int n_panic    = 0 ;
 } ;
 
 struct IoUring {
@@ -418,17 +423,16 @@ struct IoUring {
 		}
 	}
 	// services
-	void submit( uint8_t op , int fd1 , char const* addr1 , int fd2=-1 , char const* addr2=nullptr , uint32_t flags=0 ) {
+	void submit( uint8_t op , int fd1 , char const* addr1 , int opt1=-1 , char const* opt2=nullptr ) {
 		uint            tail = *sq_tail  ; if ((tail&ring_mask)!=tail) throw "queue is too short"s ;
 		::io_uring_sqe& sqe = sqes[tail] ; sqe = {} ;
 		//
-		/**/                                               sqe.flags      = IOSQE_ASYNC|IOSQE_IO_LINK ; // ensure ordered execution
-		/**/                                               sqe.opcode     =       op                  ;
-		/**/                                               sqe.fd         =       fd1                 ;
-		/**/                                               sqe.addr       = ulong(addr1)              ;
-		if ( fd2!=-1                                     ) sqe.len        =       fd2                 ;
-		if ( addr2                                       ) sqe.addr2      = ulong(addr2)              ;
-		if ( op==IORING_OP_STATX || op==IORING_OP_OPENAT ) sqe.open_flags = flags ;
+		/**/               sqe.flags  = IOSQE_ASYNC|IOSQE_IO_LINK ; // ensure ordered execution
+		/**/               sqe.opcode =       op                  ;
+		/**/               sqe.fd     =       fd1                 ;
+		/**/               sqe.addr   = ulong(addr1)              ;
+		if (opt1!=-1     ) sqe.len    =       opt1                ; // not all fields are necessary for all opcodes
+		if (opt2!=nullptr) sqe.addr2  = ulong(opt2 )              ; // .
 		//
 		sq_array[tail] = tail ;
 		__atomic_store_n( sq_tail , tail+1 , __ATOMIC_RELEASE ) ;
@@ -453,45 +457,44 @@ struct IoUring {
 
 // goal of self test is to ensure all ebpf hooks are actually attached
 // obvious (else job tracking would not start at all) :
-//	tp/syscalls/sys_enter_fsetxattr
+//	tp/syscalls/sys_enter_symlinkat
 //	tp_btf/sched_process_fork
 //	tp_btf/sched_process_exit
-::pair<int/*n_solved*/,int/*n_unsolved*/> tracee(::string dir_name={}) {
+Consumer tracee(::string dir_name={}) {
 	bool work = !dir_name.empty() ;
 	//
-	int n_unsolved = 0 ;
-	int n_solved   = 0 ;
+	Consumer res ;
 	//
 	if (work) RingBufBase::s_start_job() ;
 	//
-	int          dir_fd ;
-	int          fd     ;
-	struct stat  st     ;
-	struct statx stx    ;
+	int          dfd ;
+	int          fd  ;
+	int          rc  ;
+	struct stat  st  ;
+	struct statx stx ;
 	//
-	if (work)   dir_fd = ::open( dir_name.c_str() , O_DIRECTORY ) ;                                         else n_solved += 1 ; //                                   fexit/do_filp_open
-	if (work) { fd     = ::openat   (       dir_fd,"f"  , O_CREAT|O_WRONLY|O_TRUNC,0644 ) ; ::close(fd) ; } else n_solved += 1 ; // fentry/security_path_mknod        fexit/do_filp_open
-	if (work)            ::symlinkat( "f" , dir_fd,"l"                                  ) ;                 else n_solved += 1 ; // fentry/security_path_symlink      tp_btp/sys_exit
-	if (work)            ::mkdirat  (       dir_fd,"d"  , 0755                          ) ;                 else n_solved += 1 ; // fentry/security_path_mkdir        tp_btp/sys_exit
-	if (work)            ::linkat   (       dir_fd,"f"  , dir_fd,"f2",0                 ) ;                 else n_solved += 1 ; // fentry/security_path_link         tp_btp/sys_exit
-	if (work)            ::renameat (       dir_fd,"f2" , dir_fd,"f3"                   ) ;                 else n_solved += 1 ; // fentry/security_path_rename       tp_btp/sys_exit
-	if (work)            ::unlinkat (       dir_fd,"d"  , AT_REMOVEDIR                  ) ;                                      // fentry/security_path_rmdir        tp_btp/sys_exit
-	if (work) { fd     = ::openat   (       dir_fd,"l"  , O_RDONLY                      ) ; ::close(fd) ; } else n_solved += 2 ; // fentry/security_inode_follow_link fexit/do_filp_open
-	if (work)            ::fstatat  (       dir_fd,"l"  , &st,0                         ) ;                 else n_solved += 2 ; // fexit/filename_lookup             tp_btp/sys_exit
-	if (work)            ::unlinkat (       dir_fd,"l"  , 0                             ) ;                 else n_solved += 1 ; // fentry/security_path_unlink       tp_btp/sys_exit
+	if (work)   dfd = ::open( dir_name.c_str() , O_DIRECTORY ) ;                                      else res.n_solved += 1 ;     //                                   fexit/do_filp_open
+	if (work) { fd  = ::openat   (       dfd,"f"  , O_CREAT|O_WRONLY|O_TRUNC,0644 ) ; ::close(fd) ; } else res.n_solved += 1 ;     // fentry/security_path_mknod        fexit/do_filp_open
+	if (work) { rc  = ::symlinkat( "f" , dfd,"l"                                  ) ;               } else res.n_solved += 1 ;     // fentry/security_path_symlink      tp_btp/sys_exit
+	if (work) { rc  = ::linkat   (       dfd,"f"  , dfd,"f2",0                    ) ;               } else res.n_solved += 2 ;     // fentry/security_path_link         tp_btp/sys_exit
+	if (work) { rc  = ::renameat (       dfd,"f2" , dfd,"f3"                      ) ;               } else res.n_solved += 2 ;     // fentry/security_path_rename       tp_btp/sys_exit
+	if (work) { fd  = ::openat   (       dfd,"l"  , O_RDONLY                      ) ; ::close(fd) ; } else res.n_solved += 2 ;     // fentry/security_inode_follow_link fexit/do_filp_open
+	if (work) { rc  = ::fstatat  (       dfd,"f"  , &st,0                         ) ;               } else res.n_solved += 1 ;     // fexit/filename_lookup             tp_btp/sys_exit
+	if (work) { rc  = ::unlinkat (       dfd,"l"  , 0                             ) ;               } else res.n_solved += 1 ;     // fentry/security_path_unlink       tp_btp/sys_exit
+	(void)rc ;
 	//
-	IoUring uring { work } ;                                                                                                                       // tp_btf/task_newtask
-	if (work) uring.submit( IORING_OP_STATX     , dir_fd , "f"   , -1     , reinterpret_cast<char*>(&stx) , STATX_SIZE ) ; else n_unsolved += 1 ; // fexit/io_statx
-	if (work) uring.submit( IORING_OP_MKDIRAT   , dir_fd , "d"   , 0755                                                ) ; else n_solved   += 1 ; // fexit/io_mkdirat
-	if (work) uring.submit( IORING_OP_SYMLINKAT , dir_fd , "f"   , -1     , "l"                                        ) ; else n_solved   += 1 ; // fexit/io_symlinkat,
-	if (work) uring.submit( IORING_OP_LINKAT    , dir_fd , "f"   , dir_fd , "f4"                                       ) ; else n_solved   += 1 ; // fexit/io_linkat
-	if (work) uring.submit( IORING_OP_RENAMEAT  , dir_fd , "f4"  , dir_fd , "f5"                                       ) ; else n_solved   += 1 ; // fexit/io_renameat
-	if (work) uring.submit( IORING_OP_UNLINKAT  , dir_fd , "f5"                                                        ) ; else n_solved   += 1 ; // fexit/io_unlinkat
+	IoUring uring { work } ;                                                                                                       // tp_btf/task_newtask
+	if (work) uring.submit( IORING_OP_STATX     , dfd,"f"  , STATX_SIZE,reinterpret_cast<char*>(&stx) ) ; else res.n_solved += 1 ; // fexit/io_statx
+	if (work) uring.submit( IORING_OP_SYMLINKAT , dfd,"f"  , -1        ,"l"                           ) ; else res.n_solved += 1 ; // fexit/io_symlinkat,
+	if (work) uring.submit( IORING_OP_LINKAT    , dfd,"f"  , dfd       ,"f4"                          ) ; else res.n_solved += 2 ; // fexit/io_linkat
+	if (work) uring.submit( IORING_OP_RENAMEAT  , dfd,"f4" , dfd       ,"f5"                          ) ; else res.n_solved += 2 ; // fexit/io_renameat
+	if (work) uring.submit( IORING_OP_UNLINKAT  , dfd,"f5"                                            ) ; else res.n_solved += 1 ; // fexit/io_unlinkat
 	//
-	if (work) uring.flush()   ;
-	if (work) ::close(dir_fd) ;
+	if (work) uring.flush() ;
+	if (work) ::close(dfd)  ;
 	//
-	return { n_solved , n_unsolved } ;
+(void)dfd;(void)fd;(void)st;(void)stx;
+	return res ;
 }
 
 void self_test() {
@@ -521,9 +524,10 @@ void self_test() {
 			}
 			::waitpid( child , nullptr/*wstatus*/ , 0/*options*/ ) ;
 		}
-		::pair<int/*solved*/,int/*unsolved*/> n_expected = tracee() ;
-		if (ring_buf.consumer.n_solved  !=n_expected.first ) throw ::format( "bad solved event count : expected {}, received {}"   , n_expected.first ,ring_buf.consumer.n_solved  ) ;
-		if (ring_buf.consumer.n_unsolved!=n_expected.second) throw ::format( "bad unsolved event count : expected {}, received {}" , n_expected.second,ring_buf.consumer.n_unsolved) ;
+		Consumer expected = tracee() ;
+		if (ring_buf.consumer.n_panic   !=expected.n_panic   ) throw ::format( "bad panic  event count : expected {}, received {}"   , expected.n_panic   ,ring_buf.consumer.n_panic   ) ;
+		if (ring_buf.consumer.n_solved  !=expected.n_solved  ) throw ::format( "bad solved event count : expected {}, received {}"   , expected.n_solved  ,ring_buf.consumer.n_solved  ) ;
+		if (ring_buf.consumer.n_unsolved!=expected.n_unsolved) throw ::format( "bad unsolved event count : expected {}, received {}" , expected.n_unsolved,ring_buf.consumer.n_unsolved) ;
 		//
 	}
 	catch (::string    const& e) { msg = e        ; }

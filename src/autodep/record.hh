@@ -98,11 +98,10 @@ struct Record {
 	}
 	// static data
 	static constexpr char                      SpecialSystemDirMsg[] = "/dev, /proc or /sys" ;
-	static bool                                s_static_report       ;                                    // if true <=> report deps to s_deps instead of through slow/fast_report_fd() sockets
-	static bool                                s_enable_was_modified ;                                    // if true <=  the enable bit has been manipulated through the backdoor
+	static bool                                s_static_report       ;                         // if true <=> report deps to s_deps instead of through slow/fast_report_fd() sockets
 	static ::vmap_s<DepDigest>*                s_deps                ;
 	static ::string           *                s_deps_err            ;
-	static StaticUniqPtr<::umap_s<CacheEntry>> s_access_cache        ;                                    // map file to read accesses
+	static StaticUniqPtr<::umap_s<CacheEntry>> s_access_cache        ;                         // map file to read accesses
 	static Mutex<MutexLvl::Record>             s_mutex               ;
 private :
 	static StaticUniqPtr<AutodepEnv> _s_autodep_env           ;
@@ -114,11 +113,7 @@ private :
 	// cxtors & co
 public :
 	Record() = default ;
-	Record( NewType ,            pid_t pid=0 ) : Record( New , Maybe , pid ) {}
-	Record( NewType , Bool3 en , pid_t pid=0 ) : _real_path{s_autodep_env(New),pid} {
-		if (en==Maybe) enable = !s_autodep_env().disabled ;
-		else           enable = en==Yes                   ;
-	}
+	Record( NewType , pid_t tid=0 ) : _real_path{s_autodep_env(New),tid} {}
 	// services
 	Fd report_fd( bool fast , pid_t pid=::getpid()) {
 		if ( +*_s_autodep_env && !( +_s_report_fd[fast] && _s_report_pid[fast]==pid ) ) {
@@ -142,12 +137,12 @@ public :
 		if ( pid_t pid=::getpid() ;  _buf_pid!=pid  ) return Sent::NotSent        ;
 		else                                          return _do_send_report(pid) ;
 	}
-	void              report_direct(           JobExecRpcReq&& ,                                    bool force=false ) ; // if force, report even if disabled
-	bool/*sent*/      report_cached(           JobExecRpcReq&& ,                                    bool force=false ) ; // .
-	JobExecRpcReq::Id report_access(           JobExecRpcReq&& ,                                    bool force=false ) ; // .
-	JobExecRpcReq::Id report_access( FileLoc , JobExecRpcReq&& ,                                    bool force=false ) ; // .
-	JobExecRpcReq::Id report_access( FileLoc , JobExecRpcReq&& , FileLoc fl0 , ::string const& f0 , bool force=false ) ; // .
-	JobExecRpcReply   report_sync  (           JobExecRpcReq&&                                                       ) ; // always force
+	void              report_direct(           JobExecRpcReq&&                                    ) ;
+	bool/*sent*/      report_cached(           JobExecRpcReq&&                                    ) ;
+	JobExecRpcReq::Id report_access(           JobExecRpcReq&&                                    ) ;
+	JobExecRpcReq::Id report_access( FileLoc , JobExecRpcReq&&                                    ) ;
+	JobExecRpcReq::Id report_access( FileLoc , JobExecRpcReq&& , FileLoc fl0 , ::string const& f0 ) ;
+	JobExecRpcReply   report_sync  (           JobExecRpcReq&&                                    ) ;
 	//
 	void report_guard( ::vmap_s<FileInfo>&& fs        ) {                        report_direct({ .proc=Proc::Guard , .date=New , .files=::move(fs)       }) ;                             }
 	void report_guard( FileLoc fl , ::string const& f ) { if (fl<=FileLoc::Repo) report_guard ({ {f,{}}                                                  }) ;                             }
@@ -220,14 +215,16 @@ public :
 			using namespace Disk ;
 			if ( SkipSimple!=No && s_is_simple(file,SkipSimple==Yes/*empty_is_simple*/) ) return ;
 			//
+			AutodepEnv const&    ade     = s_autodep_env() ;
+			::vmap_s<::vector_s> views_s = ade.views_s     ;
 			SolveReport sr = r._real_path.solve( { at , file?(::string_view(file)):(::string_view()) } , no_follow ) ;
 			//
 			if ( SkipSimple==Maybe && (!file||!*file) && s_is_simple(sr.real.c_str()) ) return ;                // for empty string, there cannot be any link, so give a 2nd chance for simple
 			//
 			auto handle_dep = [&]( FileLoc fl , ::string&& file_ , Accesses a , bool store , CommentExt exts ) {
-				if ( ::vmap_s<::vector_s> const& views_s = s_autodep_env().views_s ; +views_s ) {
+				if (+views_s) {
 					Fd repo_root_fd = s_repo_root_fd() ;
-					for( auto const& [view_s,phys_s] : s_autodep_env().views_s ) {
+					for( auto const& [view_s,phys_s] : views_s ) {
 						if (!phys_s                   ) continue ;                                              // empty phys do not represent a view
 						if (!lies_within(file_,view_s)) continue ;
 						for( size_t i : iota(phys_s.size()) ) {
@@ -235,7 +232,7 @@ public :
 							::string f     = phys_s[i] + substr_view(file_,view_s.size())                     ;
 							FileInfo fi    = !last||+a ? FileInfo({repo_root_fd,f}) : FileInfo(FileTag::None) ;
 							bool     found = fi.exists() || !read                                             ; // if not reading, assume file_ is found in upper
-							fl = r._real_path.file_loc(f) ;                                                     // use f before ::move
+							fl = ade.file_loc(f) ;                                                              // use f before ::move
 							if (store) {
 								if      (last ) { real  = f ; file_loc  = fl ; }
 								else if (found) { real  = f ; file_loc  = fl ; }
@@ -447,13 +444,7 @@ public :
 	struct Readlink : Solve<> {
 		// cxtors & co
 		Readlink() = default ;
-		Readlink( Record& , Path&& , char* buf , size_t sz , Comment ) ;
-		// services
-		ssize_t operator() ( Record& , ssize_t len=0 ) ;
-		// data
-		char*  buf   = nullptr ;                                                           // for backdoor usage
-		size_t sz    = 0       ;                                                           // .
-		bool   magic = false   ;                                                           // if true <=> backdoor was used
+		Readlink( Record& , Path&& , Comment ) ;
 	} ;
 	struct Rename {
 		// cxtors & co
@@ -490,7 +481,6 @@ public :
 	}
 	// data
 	bool seen_chdir = false ;
-	bool enable     = false ;
 private :
 	RealPath _real_path ;
 	OMsgBuf  _buf       ;                                                                  // buffer that accumulate messages to send

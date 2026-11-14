@@ -435,7 +435,6 @@ class LinkAutodep(LinkPython,LinkAutodepEnv) :
 		'REAL_PATH'    : 'src/real_path.o'
 	,	'RPC_JOB'      : 'src/rpc_job.o'
 	,	'ZFD'          : 'src/zfd.o'
-	,	'BACKDOOR'     : 'src/autodep/backdoor.o'
 	,	'GATHER'       : 'src/autodep/gather.o'
 	,	'PTRACE'       : 'src/autodep/ptrace.o'
 	,	'RECORD'       : 'src/autodep/record.o'
@@ -547,8 +546,7 @@ for app in ('xxhsum','align_comments') :
 
 class LinkJobSupport(LinkAutodepEnv) :
 	deps = {
-		'BACKDOOR'     : 'src/autodep/backdoor.o'
-	,	'JOB_SUPPORT'  : 'src/autodep/job_support.o'
+		'JOB_SUPPORT'  : 'src/autodep/job_support.o'
 	,	'RECORD'       : 'src/autodep/record.o'
 	,	'RPC_JOB_EXEC' : 'src/rpc_job_exec.o'
 	}

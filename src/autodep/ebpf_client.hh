@@ -50,15 +50,15 @@ namespace EbpfDaemon {
 		static void s_add_root ( EbpfRootId , std::string const& ) ;                            // called from tracer
 	public :
 		// cxtors & co
-		RingBufBase() = default ;
-		RingBufBase(RingBufBase const& ) = delete ;                                             // not copyable
+		RingBufBase(                  ) = default ;
+		RingBufBase(RingBufBase const&) = delete  ;                                             // not copyable (move may be implemented by taking care of fd's)
 		RingBufBase( EbpfJobId jid , int rbfd ) : job_id{jid} , _ring_buf_fd{rbfd} { init() ; }
 		~RingBufBase() ;
+		void init() ;
 		bool operator+() const { return _ring_buf_fd>=0 ; }
 		bool operator!() const { return !+*this         ; }
 		// services
 		bool/*ok*/ connect_to_daemon() ;
-		void       init             () ;
 		// data
 		EbpfJobId job_id = 0 ;
 	protected :
@@ -68,21 +68,22 @@ namespace EbpfDaemon {
 		bool _registered = false ;
 	} ;
 
+	struct ThreadCtx {
+		pid_t pid_in_ns = 0 ;
+		pid_t tid_in_ns = 0 ;
+	} ;
+
 	template<class Consumer> struct RingBuf : RingBufBase {
-		struct ThreadCtx {
-			pid_t pid_in_ns  ;
-			pid_t tid_in_ns  ;
-			Path  dst        = {} ;                                                                                            // dest of 2-files events
-		} ;
 	private :
 		static int _s_handle_event( void* ctx , void* data , size_t sz ) {
 			RingBuf& ring_buf = *static_cast<RingBuf*>(ctx) ;
-			ring_buf._handle_event(data,sz) ;
-			return 0 ;
+			try                          { ring_buf._handle_event(data,sz) ; return 0 ; } // ebpf ring buffer must not see the exception
+			catch (std::string const& e) { ring_buf._msg = e ;               return 1 ; } // so it is saved in a variable in rethrown outside consume loop
 		}
 		// cxtors & co
 	public :
-		RingBuf() = default ;
+		RingBuf(              ) = default ;
+		RingBuf(RingBuf const&) = delete  ;                                            // not copyable nor movable (this is recorded inside _ring_buf as its ctx)
 		RingBuf( EbpfJobId jid , int rbfd ) : RingBufBase{jid,rbfd} { init() ; }
 		~RingBuf() {
 			if (epoll_fd!=-1) ::close            (epoll_fd ) ;
@@ -94,20 +95,12 @@ namespace EbpfDaemon {
 			_ring_buf = ::ring_buffer__new( _ring_buf_fd , _s_handle_event , this , nullptr/*opts*/ ) ; if (!_ring_buf) throw "cannot open ebpf ring buffer"s ;
 			epoll_fd  = ::ring_buffer__epoll_fd(_ring_buf)                                            ;
 		}
-		RingBuf& operator=(RingBuf&& rb) {
-			epoll_fd    =           rb.epoll_fd     ; rb.epoll_fd  = -1      ;
-			consumer    = std::move(rb.consumer   ) ;
-			_ring_buf   =           rb._ring_buf    ; rb._ring_buf = nullptr ;
-			_ctxs       = std::move(rb._ctxs      ) ;
-			_to_wake_up = std::move(rb._to_wake_up) ;
-			_started    =           rb._started     ;
-			_done       =           rb._done        ;
-			return *this ;
-		}
 		// services
-		bool/*done*/ consume() {                                                                                               // consume available events
+		bool/*done*/ consume() {                                                       // consume available events
+			_msg = {} ;
 			::ring_buffer__consume(_ring_buf) ;
-			return _done ;
+			if (_msg.empty()) return _done ;
+			else              throw _msg   ;
 		}
 	private :
 		void _handle_event( void* data , size_t sz ) {
@@ -130,11 +123,7 @@ namespace EbpfDaemon {
 			ThreadCtx & ctx = _ctxs.at(hdr.tid) ;
 			if (hdr.kind>=EBPF_HAS_DATA) {
 				Path path { hdr.root_id , { static_cast<const char*>(data)+sizeof(EbpfEventHdr) , sz-sizeof(EbpfEventHdr) } } ;
-				switch (hdr.kind) {
-					case EBPF_DST      : if (+ctx.dst) throw "double destination"s ;                                           ctx.dst = path ; break ;
-					case EBPF_PATH_RES :                                             consumer.handle_event(hdr,path        ) ;                  break ;
-					default            :                                             consumer.handle_event(hdr,path,ctx.dst) ; ctx.dst = {}   ;
-				}
+				consumer.handle_event( ctx , hdr , path ) ;
 			}
 			switch (hdr.kind) {
 				case EBPF_JOB_END    :
@@ -155,6 +144,7 @@ namespace EbpfDaemon {
 		::ring_buffer*                      _ring_buf   = nullptr ;
 		std::unordered_map<pid_t,ThreadCtx> _ctxs       ;                                                                      // context of currently handled syscall
 		std::unordered_set<pid_t>           _to_wake_up ;                                                                      // pids to wake up when ring_buffer has enough room
+		std::string                         _msg        ;
 		bool                                _started    = false   ;
 		bool                                _done       = false   ;
 	} ;

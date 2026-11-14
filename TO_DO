@@ -20,15 +20,6 @@ items (also used in XXX comments) :
 * LACK (not implemented but necessary for lmake semantic)
 ****************************************************************************************************
 
-* handle xattr in autodep
-	- although we do not manage xattr per se, we must manage sym links traversed during path resolution
-		- getxattr, setxattr, removexattr, listxattr and their l and f flavors
-		- only get and set for io_uring
-	- in ld_common.x.cc
-	- in syscall_tab.cc
-	- in ebpf.bpf.c
-		- as syscalls
-		- as io_uring
 ! before erasing a dir, check for phony targets, not only files on disk
 	- then dir markers for gcc include dirs could be phony, which is more elegant
 ? make ignore_error transitive
@@ -86,17 +77,6 @@ X gather stdout/stderr from running job_exec when lshow -o/-e
 ****************************************************************************************************
 
 * unify ebpf syscall list and syscall table for ptrace/seccomp
-* support io_uring dep recording :
-	- IORING_OP_OPENAT
-	- IORING_OP_STATX
-	- IORING_OP_OPENAT2
-	- IORING_OP_RENAMEAT
-	- IORING_OP_UNLINKAT
-	- IORING_OP_MKDIRAT
-	- IORING_OP_SYMLINKAT
-	- IORING_OP_LINKAT
-	- IORING_OP_URING_CMD ?
-	- use ebpf to trigger on internal kernel function
 * ensure SGE job are actually removed from queue when job is done
 	- and call qdel if not
 ! improve address resolution
@@ -174,6 +154,38 @@ X gather stdout/stderr from running job_exec when lshow -o/-e
 * FEATURES (not implemented and can work without)
 ****************************************************************************************************
 
+* provide explicit disable/enable of autodep
+	- provide a clean semantic : disable for current thread and processed forked by it
+	- easy with ebpf
+	- moderately difficult with ptrace/seccomp (need to intercept fork/vfork/clone)
+	- more difficult with ld_preload/ld_audit
+* ebpf
+	- for rename if it is a dir :
+		- in a first implementation, report an error
+		- then :
+			- still report an error if called from io_uring
+			- bpf_send_signal_thread(SIGSTOP) to current thread
+			- userland does the job
+				- beware that rename has occured, contrarily to existing code which works before rename
+				- or use fmod_ret() to retry syscall after userland has recorded the tree
+			- userland sends CONTINUE to interrupted thread
+			- there is a TOCTOU hazard
+				- as it is the case with current code, but on the other side (exploration is done after rather than before)
+				- rename of dirs are rather exceptional
+				- and in those rare occasions, tree is usually stable
+					- modifying the tree while it is being renamed is really awkard
+					- very unlinkely in any useful code
+	- rework backdoor commands (ldepend, etc.) to unify all autodep methods
+		- inhibit autodep (through backdoor)
+			- per thread-id (not process wide)
+			- flush queues after
+		- do work
+		- restore autodep (through backdoor)
+			- per thread-id (not process wide)
+			- flush queues before
+* implement ebpf_seccomp
+	- like seccomp, except filter is ebpf
+	- such as SEC("seccomp") int filter_syscalls(struct seccomp_data *ctx) { if (...) return SECCOMP_RET_USER_NOTIF ; else return SECCOMP_RET_ALLOW ; }
 * implement a python API to explore DAG
 * provide a config.dir_regexpr entry
 	- if auto_mkdir, create dirs each time a matching file name is seen
@@ -312,116 +324,9 @@ M port to Darwin
 * OPTIMIZATIONS
 ****************************************************************************************************
 
-* implement ebpf
-	- hooks are carefull chosen to maximize availability/stability
-		- a lot of possible hooks may be inlined in the kernel
-		- signature may change over time
-		- best are documented hooks, but not always possible/practical
-	- use tp_btf/sched_process_fork and tp_btf/sched_process_exit to manage tid table
-		- note that if a thread is killed while processing a syscall, it cannot depend on accesses done during this syscall
-		- communicate to userland start/end of all processes
-		- so that userland can reliably kill any remaining daemon if asked to do so
-	- hook fexit/vfs_get_link to capture symlinks traversed during path resolution
-		- sends both link name and target to userland
-	- for all reports, ignore "simple" files (lying in /usr and the like)
-		- those are 90% of the accesses and require no tracking
-	-finalize report at exit time
-		- hook tracepoint/raw_syscalls/sys_exit for syscalls
-			- sys_exit_xxx are not called for 32 bits syscalls
-			- first filter on syscall for fast elimination of uninteresting syscalls
-			- then filter on tid
-			- then process adequately depending on syscall
-			- for syscalls resolving path but not accessing file (or not necessary for our tracking), report end of syscall
-				- so that read links during resolution are adequately accounted
-		- hook tracepoint/io_uring/io_uring_complete to handle for io_uring
-			- io_uring we have to use worker-id for data structures, pid for reporting
-		-if resolved path was not captured :
-			- from symlinks and raw filename, we can easily reconstruct real filename (easier in userland than in kernel)
-			- in case of relative filename, capture abs path of dfd (cwd if AT_FDCWD)
-			- only compute dir_fd/cwd (if AT_FDCWD) if path was not resolved
-	- for deps
-		- for existent files
-			- hook fexit/filename_lookup (path is an output arg) to gather info : resolved path and mtime
-			- if hook has been called, processing is simplified and mtime is known
-		- for open/openat/execve/execveat, hook fentry/security_file_open
-		- for rename, hook fentry/security_path_rename
-		- for getents/getents64/readdir, do job from sy_exit as fd provides access to all necessary info
-	- targets
-		- existing files : hook fentry/filename_lookup
-			- chmod/fchmodat
-			- truncate
-		- created files : hook fentry/security_path_mknod
-			- beware that it may also be called by open(O_CREAT) and the like
-			- link/linkat
-			- mknod/mknodat
-			- symlink/symlinkat
-				- note that for symlink, from is a text, not a filename
-		- creat/open/openat : hook fentry/security_file_open
-		- rename/renameat   : hook fentry/security_path_rename
-		- unlink/unlinkat   : hook fentry/security_path_unlink
-	- in case of actual file access, report mtime (before access) to userland
-		- else, report it does not exist
-	- for rename if it is a dir :
-		- in a first implementation, report an error
-		- then :
-			- still report an error if called from io_uring
-			- bpf_send_signal_thread(SIGSTOP) to current thread
-			- userland does the job
-				- beware that rename has occured, contrarily to existing code which works before rename
-				- or use fmod_ret() to retry syscall after userland has recorded the tree
-			- userland sends CONTINUE to interrupted thread
-			- there is a TOCTOU hazard
-				- as it is the case with current code, but on the other side (exploration is done after rather than before)
-				- rename of dirs are rather exceptional
-				- and in those rare occasions, tree is usually stable
-					- modifying the tree while it is being renamed is really awkard
-					- very unlinkely in any useful code
-	- think twice about locks (require careful analysis and a priori none are necessary)
-	- timestamp everything with an increasing unique syscall id
-		- actual date is for user info only, it can associated in userland (simpler) and in kernel (if less expensive)
-			- but vdso should allow very cheap time access to userland (no actual syscall)
-		- time resolution may not be sufficient
-		- all deps/targets for a given syscall must share this unique id
-	- implement backdoors in userland
-		- just inhibit dep/target recording during backdoor execution
-		- so in ebpf filter, we only need a marker to stop/start dep recording (per thread, not per process)
-	- when daemon starts
-		- autotest to check all hooks are ok
-		- especially those that are not documented explicitly
-	- in case of ring buffer full when reporing
-		- provide a comfortable space
-		- but in case of overflow, provide an alternate communication means to panic (possibly send a signal to userland)
-* fix ebpf
-	- ensure 32 bits exe are supported
-	- duplicate auto-test feature to have 32-bits check as well
-		- this implies a separate exe for auto-test so as to have 64-bit and 32-bit versions
-	- rework syscalls table in kernel to make it an array instead of a hash map
-	- rework backdoor commands (ldepend, etc.) to unify all autodep methods
-		- inhibit autodep (through backdoor)
-			- per thread-id (not process wide)
-			- flush queues after
-		- do work
-		- restore autodep (through backdoor)
-			- per thread-id (not process wide)
-			- flush queues before
-	- manage so that Task allocation problems are correctly reported
-		- rather than a mere overflow
-	- manage 2 methods : ebpf_fast and ebpf
-		- ebpf_fast never stops job and report an error if analysis proved too difficult in kernel
-		- ebpf stops job when too difficult to analyze in kernel
-		- need 2 methods as kernel cannot know if a long link is finally a dep or not
-			- so to be reliable, it must stop preventively, which can be slow
-		- cases :
-			- dir rename
-			- long symlink that is finally not a dep
-				- if a dep, link can be read in userland
-				- job will rerun anyway if it was modified between kernel time and userland time
-* implement ebpf_seccomp
-	- like seccomp, except filter is ebpf
-	- such as SEC("seccomp") int filter_syscalls(struct seccomp_data *ctx) { if (...) return SECCOMP_RET_USER_NOTIF ; else return SECCOMP_RET_ALLOW ; }
-* implement ptrace/seccomp with a single thread within job_exec
-	- rather than 2 : on that transform ptrace events into socket messages and one that processes messages similarly to ld_preload/ld_audit
-	- particularly important when ebpf is implemented as ebpf then becomes the standard autodep method
+* optimize ptrace & seccomp cwd management
+	- cache cwd as for ld_preload/ld_audit
+	- beware that in ptrace/seccomp, there is a Record instance for each thread, not for each process
 * use copy-ref when possible :
 	- cache upload/download when a single file and no compression
 	- when uniquify
@@ -510,6 +415,11 @@ X manage HUGE pages in store
 * DOC
 ****************************************************************************************************
 
+* document LMAKE_LD_AUDIT, LMAKE_LD_PRELOAD and LMAKE_LD_PRELOAD_JEMALLOC
+	- so LD_AUDIT or LD_PRELOAD can be easily set in case of ssh
+* document LMAKE_RUNNING
+	- tell job it is running under lmake control
+	- ideally, it should not exist, but may be useful in some edge cases
 * give an example of Rule using the paths attribute
 *! make a tutorial
 ? add hard limits

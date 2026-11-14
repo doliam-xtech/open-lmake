@@ -3,6 +3,8 @@
 // This program is free software: you can redistribute/modify under the terms of the GPL-v3 (https://www.gnu.org/licenses/gpl-3.0.html).
 // This program is distributed WITHOUT ANY WARRANTY, without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
+#include "ebpf_event.h" // for magic related stuff
+
 #include <err.h>
 #include <linux/seccomp.h>
 #include <sys/prctl.h>
@@ -32,26 +34,6 @@
 
 using namespace Disk ;
 
-template<class T> static typename ::umap<pid_t,T>::const_iterator _get_ppid( pid_t pid , ::umap<pid_t,T> const& tab ) {
-	try {
-		/**/                         if (!Record::s_enable_was_modified) return tab.end()      ;
-		pid_t ppid = get_ppid(pid) ; if (ppid<=1                       ) return tab.end()      ;
-		/**/                                                             return tab.find(ppid) ;
-	} catch (::string const&) {
-		return tab.end() ;
-	}
-}
-
-struct PidInfoBase {
-	// cxtors & co
-	PidInfoBase() = default ;
-	PidInfoBase( pid_t pid , Bool3 enable ) : record{New,enable,pid} {}
-	void operator>>(::string& os) const { os << proc_mem ; }            // NO_COV
-	// data
-	Record record   ;
-	AcFd   proc_mem ;
-} ;
-
 // /!\ this function must be malloc free
 static void _print_err(const char* reason) {
 	const char* msg = ::strerror(errno) ;
@@ -74,35 +56,55 @@ int/*rc*/ AutodepPtrace::s_prepare_child(void*) {
 
 namespace {
 
-	struct PtracePidInfo : PidInfoBase {
+	struct TidInfo {
 		static constexpr Bool3 Is32Dflt = HAS_32 ? Maybe : sizeof(void*)==8 ? No : Yes ;
 		// cxtors & co
-		using PidInfoBase::PidInfoBase ;
+		TidInfo() = default ;
+		TidInfo(pid_t tid) : record{New,tid} {}
+		void operator>>(::string& os) const { os << proc_mem ; } // NO_COV
 		// services
 		void event( pid_t , int wstatus ) ;
+	private :
+		bool _do_magic_symlinkat( const uint64_t args[6] ) { //!                                                                     done
+			int          dfd    = int  (args[1])                                             ; if (dfd!=EBPF_MAGIC_FD       ) return false ;
+			off_t        target = off_t(args[0])                                             ;
+			EbpfMagicReq req    ;
+			ssize_t      cnt    = ::pread( proc_mem , &req , sizeof(EbpfMagicReq) , target ) ; if (cnt!=sizeof(EbpfMagicReq)) return false ;
+			switch (req.proc) { //!                                                      done
+				case EBPF_MAGIC_DISABLE : SWEAR(!_disabled) ; _disabled = true  ; return true ;
+				case EBPF_MAGIC_ENABLE  : SWEAR( _disabled) ; _disabled = false ; return true ;
+			DN}
+			return false/*done*/ ;
+		}
 		// data
-		void* ctx     = nullptr  ;
-		long  syscall = 0        ;
-		Bool3 is_32   = Is32Dflt ;
+	public :
+		Record record   ;
+		AcFd   proc_mem ;
+		void*  ctx      = nullptr  ;
+		long   syscall  = 0        ;
+		Bool3  is_32    = Is32Dflt ;
+	private :
+		bool _disabled = false ;
 	} ;
 
-	void PtracePidInfo::event( pid_t pid , int wstatus ) {
-		static bool ctx_force_inval = false ;                                                           // unused, just a marker for ctx
-		static bool ctx_force_nosys = false ;                                                           // unused, just a marker for ctx
-		int sig   = WSTOPSIG(wstatus) ;
-		int event = wstatus>>16       ;
-		if (sig!=(SIGTRAP|0x80))
+	void TidInfo::event( pid_t tid , int wstatus ) {
+		static bool ctx_force_inval = false ;                                                                 // unused, just a marker for ctx
+		static bool ctx_force_nosys = false ;                                                                 // .
+		//
+		int sig_in  = WSTOPSIG(wstatus) ;
+		int sig_out = 0                 ;
+		int event   = wstatus>>16       ;
+		if (sig_in!=(SIGTRAP|0x80))
 			switch (event) {
-				case PTRACE_EVENT_SECCOMP : SWEAR_PROD(!ctx) ;                       break            ; // syscall enter
-				case 0                    : if        (sig==SIGTRAP)       sig = 0 ; goto NextSyscall ; // other stop reasons, wash SIGTRAP, ignore
-				default                   : SWEAR_PROD(sig==SIGTRAP,sig) ; sig = 0 ; goto NextSyscall ; // ignore other events
+				case PTRACE_EVENT_SECCOMP : SWEAR_PROD(!ctx) ;                             break            ; // syscall enter
+				case 0                    : if        (sig_in!=SIGTRAP) sig_out = sig_in ; goto NextSyscall ; // other stop reasons, wash SIGTRAP, ignore
+				default                   : SWEAR_PROD(sig_in==SIGTRAP,sig_in) ;           goto NextSyscall ; // ignore other events
 			}
 		try {
-			sig = 0 ;
-			#if HAS_PTRACE_GET_SYSCALL_INFO                                                             // use portable calls if implemented
+			#if HAS_PTRACE_GET_SYSCALL_INFO                                                                   // use portable calls if implemented
 				struct ::ptrace_syscall_info syscall_info ;
-				if ( ::ptrace( PTRACE_GET_SYSCALL_INFO , pid , sizeof(struct ptrace_syscall_info) , &syscall_info )<=0 )
-					throw cat("cannot get syscall info (",StrErr(),") from ",pid) ;
+				if ( ::ptrace( PTRACE_GET_SYSCALL_INFO , tid , sizeof(struct ptrace_syscall_info) , &syscall_info )<=0 )
+					throw cat("cannot get syscall info (",StrErr(),") from ",tid) ;
 			#endif
 			if (!ctx) {
 				// syscall enter
@@ -111,47 +113,63 @@ namespace {
 					if (is_32==Maybe) is_32   = No|(NonPortable::is_32_from_audit_arch(syscall_info.arch)) ;
 					/**/              syscall = syscall_info.seccomp.nr                                    ;
 				#else
-					if (is_32==Maybe) is_32   = No|NonPortable::ptrace_is_32(pid) ;
-					/**/              syscall = NonPortable::ptrace_get_nr(pid)   ;                     // use non-portable calls if portable accesses are not implemented
+					if (is_32==Maybe) is_32   = No|NonPortable::ptrace_is_32(tid) ;
+					/**/              syscall = NonPortable::ptrace_get_nr(tid)   ;                           // use non-portable calls if portable accesses are not implemented
 				#endif
 				#if !HAS_32
 					if (is_32==Yes) {
 						record.report_panic(
-							cat("32-bit process ",read_lnk(cat("/proc/",pid,"/exe"))," (",pid,") on 64-bit host with no 32-bit support")
+							cat("32-bit process ",read_lnk(cat("/proc/",tid,"/exe"))," (",tid,") on 64-bit host with no 32-bit support")
 						,	false/*die*/
 						) ;
 						throw cat("bad arch 32-bit versus 64-bit") ;
 					}
 				#endif
 				#ifdef __X32_SYSCALL_BIT
-					syscall &= ~__X32_SYSCALL_BIT ;                                                     // we only look at char* args, so mode x32 has no impact
+					syscall &= ~__X32_SYSCALL_BIT ;                                                           // we only look at char* args, so mode x32 has no impact
 				#endif
-				SWEAR_PROD( syscall>=0 && syscall<SyscallDescr::NSyscalls , syscall ) ;                 // bad syscall should have been filtered out by BPF
+				if ( syscall<0 || syscall>=SyscallDescr::NSyscalls ) {
+					#if HAS_SECCOMP
+						FAIL(is_32,syscall) ;                                                                 // bad syscalls should have been filtered out by BPF
+					#else
+						goto NextSyscall ;
+					#endif
+				}
 				#if HAS_32
 					SyscallDescr const& descr = is_32==Yes ? SyscallDescr::s_tab32[syscall] : SyscallDescr::s_tab[syscall] ;
 				#else
 					SyscallDescr const& descr =                                               SyscallDescr::s_tab[syscall] ;
 				#endif
-				SWEAR_PROD( descr.entry , is_32,syscall ) ;                                             // syscall should have been filtered out by BPF
-				#if HAS_PTRACE_GET_SYSCALL_INFO                                                         // use portable calls if implemented
+				if (!descr.entry) {
+					#if HAS_SECCOMP
+						FAIL(is_32,syscall) ;                                                                 // unhandled syscalls should have been filtered out by BPF
+					#else
+						goto NextSyscall ;
+					#endif
+				}
+				#if HAS_PTRACE_GET_SYSCALL_INFO                                                               // use portable calls if implemented
 					// ensure args is actually an array of uint64_t although one is declared as unsigned long and the other is unsigned long long
 					auto& sc_args = syscall_info.seccomp.args ;
 					static_assert( sizeof(sc_args[0])==sizeof(uint64_t) && ::is_unsigned_v<::remove_reference_t<decltype(sc_args[0])>> ) ;
 					uint64_t* args = reinterpret_cast<uint64_t*>(sc_args) ;
 				#else
-					::array<uint64_t,6> arg_array = NonPortable::ptrace_get_args(pid) ;                 // use non-portable calls if portable accesses are not implemented
-					uint64_t*           args      = arg_array.data()                  ;                 // we need a variable to hold the data while we pass the pointer
+					::array<uint64_t,6> arg_array = NonPortable::ptrace_get_args(tid) ;                       // use non-portable calls if portable accesses are not implemented
+					uint64_t*           args      = arg_array.data()                  ;                       // we need a variable to hold the data while we pass the pointer
 				#endif
-				if (!proc_mem) proc_mem = AcFd( cat("/proc/",pid,"/mem") , {O_RDWR} ) ;
+				if (!proc_mem) proc_mem = AcFd( cat("/proc/",tid,"/mem") , {O_RDWR} ) ;
+				//
+				if ( syscall==SYS_symlinkat && _do_magic_symlinkat(args) ) goto NextSyscall ;                 // manage disabled tids before filtering them
+				if ( _disabled                                           ) goto NextSyscall ;
+				//
 				bool refresh = false ;
 				try { //!              vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
 					tie(ctx,refresh) = descr.entry( record , proc_mem , args , false/*emulate*/ , descr.comment ) ;
 					//                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-					if (!descr.exit) SWEAR_PROD( !ctx , syscall ) ;                                     // no need for a context if we are not called at exit
+					if (!descr.exit) SWEAR_PROD( !ctx , syscall ) ;                                           // no need for a context if we are not called at exit
 				} catch(::string const& msg) {
 					if (+msg) ctx = &ctx_force_inval ;
 					else      ctx = &ctx_force_nosys ;
-					NonPortable::ptrace_set_nr( pid , -1/*illegal syscall*/ ) ;                         // prevent execution of asked syscall
+					NonPortable::ptrace_set_nr( tid , -1/*illegal syscall*/ ) ;                               // prevent execution of asked syscall
 				}
 				if (refresh) {
 					proc_mem.close() ;
@@ -168,7 +186,7 @@ namespace {
 						SWEAR_PROD( syscall_info.op==PTRACE_SYSCALL_INFO_EXIT ) ;
 						orig_rc = syscall_info.exit.rval ;
 					#else
-						orig_rc = NonPortable::ptrace_get_res(pid) ;                                    // use non-portable calls if portable accesses are not implemented
+						orig_rc = NonPortable::ptrace_get_res(tid) ;                                          // use non-portable calls if portable accesses are not implemented
 					#endif
 					#if HAS_32
 						SyscallDescr const& descr = is_32==Yes ? SyscallDescr::s_tab32[syscall] : SyscallDescr::s_tab[syscall] ;
@@ -183,15 +201,15 @@ namespace {
 					//   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 					if (rc==-1) rc = -errno ;
 				}
-				if (rc!=orig_rc) NonPortable::ptrace_set_res( pid , rc ) ;
+				if (rc!=orig_rc) NonPortable::ptrace_set_res( tid , rc ) ;
 				ctx = nullptr ;
 			}
 		} catch (::string const& e) {
 			Trace("event","process_is_dead",e) ;
 		}
 	NextSyscall :
-		long rc = ::ptrace( ctx?PTRACE_SYSCALL:PTRACE_CONT , pid , 0/*addr*/ , sig ) ;
-		throw_unless( rc==0||errno==ESRCH , "cannot continue (",StrErr(),") process ",pid ) ;
+		long rc = ::ptrace( ctx?PTRACE_SYSCALL:PTRACE_CONT , tid , 0/*addr*/ , sig_out ) ;
+		throw_unless( rc==0||errno==ESRCH , "cannot continue (",StrErr(),") process ",tid ) ;
 	}
 
 }
@@ -205,29 +223,27 @@ int/*wstatus*/ AutodepPtrace::process(pid_t child_pid) {
 	;
 	Trace trace("AutodepPtrace::process",child_pid) ;
 	//
-	Lock                        lock    { Record::s_mutex } ;              // we have a single thread here, no need to lock record reporting, but Record code checks that lock is taken
-	::umap<pid_t,PtracePidInfo> tab     ;
-	int                         wstatus ;
-	pid_t                       pid     = ::wait(&wstatus)  ;              // wait for child to stop
-	SWEAR( pid==child_pid      , pid,child_pid ) ;                         // job has not started yet, only a single child exists
+	Lock                  lock    { Record::s_mutex } ;                    // we have a single thread here, no need to lock record reporting, but Record code checks that lock is taken
+	::umap<pid_t,TidInfo> tab     ;
+	int                   wstatus ;
+	pid_t                 tid     = ::wait(&wstatus)  ;                    // wait for child to stop
+	SWEAR( tid==child_pid , tid,child_pid ) ;                              // job has not started yet, only a single child exists
 	#if HAS_SECCOMP
 		throw_unless( WIFSTOPPED(wstatus) , "cannot ptrace, consider using autodep='seccomp' instead" ) ;
 	#else
 		throw_unless( WIFSTOPPED(wstatus) , "cannot ptrace"                                         ) ;
 	#endif
-	{ long rc = ::ptrace(PTRACE_SETOPTIONS,pid,0/*addr*/,Options  ) ; swear_prod( rc==0 , cat("cannot set ptrace options (",StrErr(),") for process ",pid                        )) ; }
-	{ long rc = ::ptrace(PTRACE_CONT      ,pid,0/*.   */,0/*data*/) ; swear_prod( rc==0 , cat("cannot continue ("          ,StrErr(),") process "    ,pid," after setting ptrace")) ; }
+	{ long rc = ::ptrace(PTRACE_SETOPTIONS,tid,0/*addr*/,Options  ) ; swear_prod( rc==0 , cat("cannot set ptrace options (",StrErr(),") for process ",tid                        )) ; }
+	{ long rc = ::ptrace(PTRACE_CONT      ,tid,0/*.   */,0/*data*/) ; swear_prod( rc==0 , cat("cannot continue ("          ,StrErr(),") process "    ,tid," after setting ptrace")) ; }
 	//
-	while( (pid=::wait(&wstatus))>1 ) {
-		auto           it     = _get_ppid( pid , tab )                              ;
-		Bool3          enable = it==tab.end() ? Maybe : No|it->second.record.enable ;
-		PtracePidInfo& info   = tab.try_emplace( pid , pid,enable ).first->second   ;
+	while( (tid=::wait(&wstatus))>1 ) {
+		TidInfo& info = tab.try_emplace( tid , tid ).first->second ;
 		if (WIFSTOPPED(wstatus)) {
-			info.event(pid,wstatus) ;
+			info.event(tid,wstatus) ;
 		} else {
-			SWEAR_PROD( WIFEXITED(wstatus) || WIFSIGNALED(wstatus) , "unrecognized wstatus ",wstatus," for pid ",pid ) ;
-			tab.erase(pid) ;
-			if (pid==child_pid) {
+			SWEAR_PROD( WIFEXITED(wstatus) || WIFSIGNALED(wstatus) , "unrecognized wstatus ",wstatus," for tid ",tid ) ;
+			tab.erase(tid) ;
+			if (tid==child_pid) {
 				trace("done",wstatus) ;
 				return wstatus ;
 			}

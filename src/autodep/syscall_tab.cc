@@ -13,7 +13,6 @@
 
 #include "non_portable.hh"
 
-#include "backdoor.hh"
 #include "record.hh"
 
 #include "syscall_tab.hh"
@@ -301,36 +300,10 @@ struct Openat2Helper {
 }
 
 // read_lnk
-struct ReadlinkHelper {
-	Record::Readlink read_lnk ;
-	uint64_t         buf      ;
-} ;
 template<bool At> [[maybe_unused]] static ::pair<void* /*ctx*/,bool/*refresh*/> _entry_read_lnk( Record& r , Fd proc_mem , uint64_t args[6] , bool /*emulate*/ , Comment c ) {
-	try {
-		char*           buf = +proc_mem ? nullptr : reinterpret_cast<char*>(args[At+1])                                                  ;
-		ReadlinkHelper& rl  = *new ReadlinkHelper{ .read_lnk={r,_path<At>(proc_mem,args+0),buf,size_t(args[At+2]),c} , .buf=args[At+1] } ;
-		if (rl.read_lnk.magic) return { &rl , false/*refresh*/ } ;
-		else                   delete &rl ;
-	} catch (::string const&) {}
+	try                     { Record::Readlink( r , _path<At>(proc_mem,args+0) , c ) ; }
+	catch (::string const&) {}
 	return {} ;
-}
-[[maybe_unused]] static int64_t/*rc*/ _exit_read_lnk( void* ctx , Record& r , Fd proc_mem , ::optional<int64_t> rc ) {
-	if (!rc) rc = 0 ;
-	return _do_exit<ReadlinkHelper>( ctx , {}/*rc*/
-	,	[&](ReadlinkHelper& rl)->int64_t {
-			SWEAR( rl.read_lnk.magic ) ;                                                             // else we should not be here
-			int64_t cnt = rl.read_lnk(r,*rc) ;
-			errno = 0 ;
-			if (cnt>=0) {
-				SWEAR_PROD( cnt<=ssize_t(rl.read_lnk.sz) , cnt,rl.read_lnk.sz ) ;
-				if (+proc_mem)                                                                       // access to backdoor was emulated, we must transport result to actual user space
-					try                     { _poke( proc_mem , rl.buf , rl.read_lnk.buf , cnt ) ; }
-					catch (::string const&) { cnt = -+MagicErrno::CannotPoke ;                     } // magic errors are reported directly as -errno, not through inaccessible errno
-				if (rl.read_lnk.buf) delete[] rl.read_lnk.buf ;                                      // buf has been allocated when processing magic
-			}
-			return cnt ;
-		}
-	) ;
 }
 
 // rename
@@ -432,9 +405,8 @@ template<bool At,int FlagArg> [[maybe_unused]] static ::pair<void* /*ctx*/,bool/
 
 // stat
 template<bool At,int FlagArg> [[maybe_unused]] static ::pair<void* /*ctx*/,bool/*refresh*/> _do_stat( Record& r , Fd proc_mem , uint64_t args[6] , Accesses a , Comment c ) {
-	try {
-		Record::Stat( r , _path<At>(proc_mem,args+0) , _flag<FlagArg>(args,AT_SYMLINK_NOFOLLOW) , a , c ) ;
-	} catch (::string const&) {}
+	try                     { Record::Stat( r , _path<At>(proc_mem,args+0) , _flag<FlagArg>(args,AT_SYMLINK_NOFOLLOW) , a , c ) ; }
+	catch (::string const&) {}
 	return {} ;
 }
 template<bool At,int FlagArg> [[maybe_unused]] static ::pair<void* /*ctx*/,bool/*refresh*/> _entry_stat( Record& r , Fd proc_mem , uint64_t args[6] , bool /*emulate*/ , Comment c ) {
@@ -486,9 +458,15 @@ template<bool Is32=false> static constexpr SyscallDescr::Tab _mk_syscall_descr_t
 	FILL_ENTRY( execveat          , { _entry_execve    <true ,4         > , nullptr        , -1 , SyscallConvention::Plain , Comment::execveat          } ) ;
 	FILL_ENTRY( getdents          , { _entry_getdents                     , _exit_getdents , -1 , SyscallConvention::Plain , Comment::getdents          } ) ;
 	FILL_ENTRY( getdents64        , { _entry_getdents                     , _exit_getdents , -1 , SyscallConvention::Plain , Comment::getdents64        } ) ;
+	FILL_ENTRY( getxattr          , { _entry_solve     <false,FlagNever > , nullptr        ,  0 , SyscallConvention::Plain , Comment::getxattr          } ) ;
 	FILL_ENTRY( io_uring_enter    , { _entry_io_uring                     , nullptr        , -1 , SyscallConvention::Plain , Comment::io_uring_enter    } ) ;
 	FILL_ENTRY( io_uring_register , { _entry_io_uring                     , nullptr        , -1 , SyscallConvention::Plain , Comment::io_uring_register } ) ;
 	FILL_ENTRY( io_uring_setup    , { _entry_io_uring                     , nullptr        , -1 , SyscallConvention::Plain , Comment::io_uring_setup    } ) ;
+	FILL_ENTRY( lgetxattr         , { _entry_solve     <false,FlagAlways> , nullptr        ,  0 , SyscallConvention::Plain , Comment::lgetxattr         } ) ;
+	FILL_ENTRY( listxattr         , { _entry_solve     <false,FlagNever > , nullptr        ,  0 , SyscallConvention::Plain , Comment::listxattr         } ) ;
+	FILL_ENTRY( llistxattr        , { _entry_solve     <false,FlagAlways> , nullptr        ,  0 , SyscallConvention::Plain , Comment::llistxattr        } ) ;
+	FILL_ENTRY( lremovexattr      , { _entry_solve     <false,FlagAlways> , nullptr        ,  0 , SyscallConvention::Plain , Comment::lremovexattr      } ) ;
+	FILL_ENTRY( lsetxattr         , { _entry_solve     <false,FlagAlways> , nullptr        ,  0 , SyscallConvention::Plain , Comment::lsetxattr         } ) ;
 	FILL_ENTRY( link              , { _entry_lnk       <false,FlagNever > , _exit_lnk      ,  1 , SyscallConvention::Plain , Comment::link              } ) ;
 	FILL_ENTRY( linkat            , { _entry_lnk       <true ,4         > , _exit_lnk      ,  3 , SyscallConvention::Plain , Comment::linkat            } ) ;
 	FILL_ENTRY( mkdir             , { _entry_solve     <false,FlagAlways> , nullptr        ,  0 , SyscallConvention::Plain , Comment::mkdir             } ) ;
@@ -504,8 +482,9 @@ template<bool Is32=false> static constexpr SyscallDescr::Tab _mk_syscall_descr_t
 	FILL_ENTRY( open_tree         , { _entry_solve     <true ,2         > , nullptr        ,  1 , SyscallConvention::Fd    , Comment::open_tree         } ) ;
 	FILL_ENTRY( open_tree_attr    , { _entry_solve     <true ,2         > , nullptr        ,  1 , SyscallConvention::Fd    , Comment::open_tree_attr    } ) ;
 	FILL_ENTRY( readdir           , { _entry_getdents                     , _exit_getdents , -1 , SyscallConvention::Plain , Comment::readdir           } ) ;
-	FILL_ENTRY( readlink          , { _entry_read_lnk  <false           > , _exit_read_lnk ,  0 , SyscallConvention::Plain , Comment::readlink          } ) ;
-	FILL_ENTRY( readlinkat        , { _entry_read_lnk  <true            > , _exit_read_lnk ,  1 , SyscallConvention::Plain , Comment::readlinkat        } ) ;
+	FILL_ENTRY( readlink          , { _entry_read_lnk  <false           > , nullptr        ,  0 , SyscallConvention::Plain , Comment::readlink          } ) ;
+	FILL_ENTRY( readlinkat        , { _entry_read_lnk  <true            > , nullptr        ,  1 , SyscallConvention::Plain , Comment::readlinkat        } ) ;
+	FILL_ENTRY( removexattr       , { _entry_solve     <false,FlagNever > , nullptr        ,  0 , SyscallConvention::Plain , Comment::removexattr       } ) ;
 	FILL_ENTRY( rename            , { _entry_rename    <false,FlagNever > , _exit_rename   ,  1 , SyscallConvention::Plain , Comment::rename            } ) ;
 	FILL_ENTRY( renameat          , { _entry_rename    <true ,FlagNever > , _exit_rename   ,  3 , SyscallConvention::Plain , Comment::renameat          } ) ;
 	FILL_ENTRY( renameat2         , { _entry_rename    <true ,4         > , _exit_rename   ,  3 , SyscallConvention::Plain , Comment::renameat2         } ) ;
@@ -515,10 +494,12 @@ template<bool Is32=false> static constexpr SyscallDescr::Tab _mk_syscall_descr_t
 	FILL_ENTRY( fstatat64         , { _entry_stat      <true ,3         > , nullptr        ,  1 , SyscallConvention::Plain , Comment::fstatat64         } ) ;
 	FILL_ENTRY( lstat             , { _entry_stat      <false,FlagAlways> , nullptr        ,  0 , SyscallConvention::Plain , Comment::lstat             } ) ;
 	FILL_ENTRY( lstat64           , { _entry_stat      <false,FlagAlways> , nullptr        ,  0 , SyscallConvention::Plain , Comment::lstat64           } ) ;
+	FILL_ENTRY( rmdir             , { _entry_solve     <false,FlagAlways> , nullptr        ,  0 , SyscallConvention::Plain , Comment::rmdir             } ) ;
 	FILL_ENTRY( statx             , { _entry_statx                        , nullptr        ,  1 , SyscallConvention::Plain , Comment::statx             } ) ;
 	FILL_ENTRY( newfstatat        , { _entry_stat      <true ,3         > , nullptr        ,  1 , SyscallConvention::Plain , Comment::newfstatat        } ) ;
 	FILL_ENTRY( oldstat           , { _entry_stat      <false,FlagNever > , nullptr        ,  0 , SyscallConvention::Plain , Comment::oldstat           } ) ;
 	FILL_ENTRY( oldlstat          , { _entry_stat      <false,FlagAlways> , nullptr        ,  0 , SyscallConvention::Plain , Comment::oldlstat          } ) ;
+	FILL_ENTRY( setxattr          , { _entry_solve     <false,FlagNever > , nullptr        ,  0 , SyscallConvention::Plain , Comment::setxattr          } ) ;
 	FILL_ENTRY( statfs            , { _entry_solve     <false,FlagNever > , nullptr        ,  0 , SyscallConvention::Plain , Comment::statfs            } ) ;
 	FILL_ENTRY( statfs64          , { _entry_solve     <false,FlagNever > , nullptr        ,  0 , SyscallConvention::Plain , Comment::statfs64          } ) ;
 	FILL_ENTRY( symlink           , { _entry_symlink   <false           > , _exit_sym_lnk  ,  1 , SyscallConvention::Plain , Comment::symlink           } ) ;

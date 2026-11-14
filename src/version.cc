@@ -1,56 +1,18 @@
 #include "version.hh"
 namespace Version {
-	uint64_t    constexpr Cache = 63      ; // be165f64116126269556f5e0ed6b63f7
-	uint64_t    constexpr Codec = 3       ; // 403dc2743b6e16290876935ae09d2242
-	uint64_t    constexpr Repo  = 68      ; // 7294200e7304181bb0f332bd092ffeec
-	uint64_t    constexpr Job   = 35      ; // c3cb74797eb4a2e0750eccbca00dce2d
+	uint64_t    constexpr Cache = 65      ; // 51c0c6b0b451b661280bfdb237975d25
+	uint64_t    constexpr Codec = 3       ; // 14f6466440812eb056085e97f4b8bcb7
+	uint64_t    constexpr Repo  = 70      ; // 1e4f50b7fc829498e44e806260a4baa8
+	uint64_t    constexpr Job   = 37      ; // a918f883af798fa52565a32500aa68ca
 	const char* const     Major = "26.11" ;
 	uint64_t    constexpr Tag   = 0       ;
 }
 
 // ********************************************
-// * Cache : be165f64116126269556f5e0ed6b63f7 *
+// * Cache : 51c0c6b0b451b661280bfdb237975d25 *
 // ********************************************
 //
-//	// START_OF_VERSIONING CACHE REPO JOB
-//		res << ':' ;
-//		if (auto_mkdir     ) res << 'm' ;
-//		if (disabled       ) res << 'd' ;
-//		if (readdir_ok     ) res << 'D' ;
-//		if (ignore_stat    ) res << 'i' ;
-//		if (io_uring_ok    ) res << 'I' ;
-//		if (mount_chroot_ok) res << 'M' ;
-//		if (ext_write_ok   ) res << 'W' ;
-//		if (deps_in_system ) res << 'x' ;
-//		if (ext_read_ok    ) res << 'X' ;
-//		switch (file_sync) {
-//			case FileSync::Auto    : res << "s?" ; break ;
-//			case FileSync::None    : res << "s-" ; break ;
-//			case FileSync::Dir     : res << "sd" ; break ;
-//			case FileSync::Readdir : res << "sr" ; break ;
-//			case FileSync::Afs     : res << "sa" ; break ;
-//			case FileSync::Beegfs  : res << "sb" ; break ;
-//			case FileSync::Ceph    : res << "sc" ; break ;
-//			case FileSync::Gpfs    : res << "sg" ; break ;
-//			case FileSync::Lustre  : res << "sl" ; break ;
-//			case FileSync::Nfs     : res << "sn" ; break ;
-//			case FileSync::Ocfs2   : res << "so" ; break ;
-//		DF}                                                // NO_COV
-//		switch (lnk_support) {
-//			case LnkSupport::None    : res << "ln" ; break ;
-//			case LnkSupport::File    : res << "lf" ; break ;
-//			case LnkSupport::Full    : res << "la" ; break ;
-//			case LnkSupport::FullExt : res << "lx" ; break ;
-//		DF} //! NO_COV                                                   empty_ok
-//		res <<':'<< '"'<<mk_printable<'"'>(                  fqdn               )<<'"' ;
-//		res <<':'<< '"'<<mk_printable<'"'>(                  tmp_dir_s          )<<'"' ;
-//		res <<':'<< '"'<<mk_printable<'"'>(                  repo_root_s        )<<'"' ;
-//		res <<':'<< '"'<<mk_printable<'"'>(                  sub_repo_s         )<<'"' ;
-//		res <<':'<<      mk_printable     (                  src_dirs_s  ,false )      ;
-//		res <<':'<<      mk_printable     (mk_vmap<::string>(codecs     ),false )      ;
-//		res <<':'<<      mk_printable     (                  views_s     ,false )      ;
-//		// END_OF_VERSIONING
-//		// START_OF_VERSIONING CACHE
+//	// START_OF_VERSIONING CACHE
 //		{ ::string file=g_store_dir_s+"key"       ; sync_guard.access(file) ; _g_key_file      .init( file , !read_only ) ; }
 //		{ ::string file=g_store_dir_s+"job_name"  ; sync_guard.access(file) ; _g_job_name_file .init( file , !read_only ) ; }
 //		{ ::string file=g_store_dir_s+"node_name" ; sync_guard.access(file) ; _g_node_name_file.init( file , !read_only ) ; }
@@ -195,7 +157,6 @@ namespace Version {
 //		// START_OF_VERSIONING CACHE REPO JOB
 //		bool                             auto_mkdir       = false ;                   // if true  <=> auto mkdir in case of chdir
 //		bool                             deps_in_system   = false ;                   // if false <=> system files are simple and not considered as deps
-//		bool                             disabled         = false ;                   // if true  <=> no automatic report
 //		bool                             ext_read_ok      = false ;                   // if true  <=> allow reading outside repo and source dirs
 //		bool                             ext_write_ok     = false ;                   // if true  <=> allow writing outside repo
 //		bool                             ignore_stat      = false ;                   // if true  <=> stat-like syscalls do not trigger dependencies
@@ -909,6 +870,10 @@ namespace Version {
 //	,	__readlink__chk                            , __readlinkat_chk
 //	,	__realpath_chk
 //	,	__xstat                , __xstat64
+//	,	getxattr               , lgetxattr
+//	,	listxattr              , llistxattr
+//	,	setxattr               , lsetxattr
+//	,	removexattr            , lremovexattr
 //	// lmake functions
 //	,	Analysis
 //	,	CheckDeps        , CheckTargets // not Chk... as name is seen by user
@@ -1100,11 +1065,11 @@ namespace Version {
 //	// END_OF_VERSIONING
 
 // ********************************************
-// * Codec : 403dc2743b6e16290876935ae09d2242 *
+// * Codec : 14f6466440812eb056085e97f4b8bcb7 *
 // ********************************************
 //
 //			// START_OF_VERSIONING CODEC
-//				res = AcFd({rfd,node},{.sync_guard=&sync_guard}).read() ;                                       // if node exists, it contains the reply
+//				res = AcFd({rfd,node},{.sync_guard=&sync_guard}).read() ;                           // if node exists, it contains the reply
 //				// END_OF_VERSIONING
 //				// START_OF_VERSIONING CODEC
 //				if (fi.tag()==FileTag::Lnk) res = read_lnk( {rfd,node} , &sync_guard ) ;
@@ -1112,19 +1077,19 @@ namespace Version {
 //					throw_unless( res.ends_with(DecodeSfx) , "bad encode link" ) ;
 //					res.resize( res.size() - DecodeSfxSz )                       ;
 //				} else {
-//					if (_retry_codec(r,crs,node,Comment::Encode)) {
+//					if (_retry_codec(*record,crs,node,Comment::Encode)) {
 //						throw_unless( !depended , "cannot use codec file ",cf.file ) ;
 //						depended = true ;
 //						goto Retry/*BACKWARD*/ ;
 //					}
 //					if ( !crs.is_dir() && !lock ) {
 //						lock = {rfd,cf.file} ;
-//						lock.lock_shared( cat(host(),'-',::getpid()) ) ;                                                                       // passed id is for debug only
+//						lock.lock_shared( cat(host(),'-',::getpid()) ) ;                                                 // passed id is for debug only
 //						throw_unless( +lock , "cannot lock codec file ",cf.file ) ;
 //						goto Retry/*BACKWARD*/ ;
 //					}
 //					::string dir_s = CodecFile::s_dir_s(crs.tab) ;
-//					creat_store( {rfd,dir_s} , crc_base64 , val , crs.umask , &sync_guard ) ;                                                  // ensure data exist in store
+//					creat_store( {rfd,dir_s} , crc_base64 , val , crs.umask , &sync_guard ) ;                            // ensure data exist in store
 //					//
 //					CodecFile dcf       { false/*encode*/ , crs.tab , ctx , crc_hex.substr(0,min_len) }                                       ;
 //					::string& code      = dcf.code()                                                                                          ;
@@ -1135,27 +1100,27 @@ namespace Version {
 //						::string decode_node = dcf.name() ;
 //						try {
 //							sym_lnk( {rfd,decode_node} , rel_data       , {.sync_guard=&sync_guard,.umask=crs.umask} ) ;
-//							sym_lnk( {rfd,node       } , code+DecodeSfx , {.sync_guard=&sync_guard,.umask=crs.umask} ) ;                       // create the encode side
+//							sym_lnk( {rfd,node       } , code+DecodeSfx , {.sync_guard=&sync_guard,.umask=crs.umask} ) ; // create the encode side
 //							//
-//							FileInfo stamp_fi { dir_s+"stamp" , {.sync_guard=&sync_guard} } ;                                                  // stamp created links to logical date to ensure proper ...
-//							touch( {rfd,decode_node} , stamp_fi.date , {.sync_guard=&sync_guard} ) ;                                           // ... overwritten detection in lmake engine ...
-//							touch( {rfd,node       } , stamp_fi.date , {.sync_guard=&sync_guard} ) ;                                           // ... if no stamp, date is the epoch, which is fine
+//							FileInfo stamp_fi { dir_s+"stamp" , {.sync_guard=&sync_guard} } ;        // stamp created links to logical date to ensure proper overwritten detection in lmake engine ...
+//							touch( {rfd,decode_node} , stamp_fi.date , {.sync_guard=&sync_guard} ) ; // ... if no stamp, date is the epoch, which is fine
+//							touch( {rfd,node       } , stamp_fi.date , {.sync_guard=&sync_guard} ) ;
 //							//
 //							if (!crs.is_dir()) {
 //								::string new_code = cat(dir_s,"new_codes/",CodecCrc(New,decode_node).base64()) ;
-//								sym_lnk( {rfd,new_code} , "../"+node , {.sync_guard=&sync_guard} ) ;                                           // tell server
+//								sym_lnk( {rfd,new_code} , "../"+node , {.sync_guard=&sync_guard} ) ;                               // tell server
 //							}
 //							ad.flags.extra_dflags |= ExtraDflag::CreateEncode ;
-//							r.report_access( { .comment=Comment::Encode , .digest=ad , .files={{decode_node,FileInfo()}} } , true/*force*/ ) ; // report no access, but with create_encode flag
-//							goto Found ;                                                                                                       // if sym_lnk succeeds, we have created the code ...
-//						} catch (::string const& e) {                                                                                          // ... (atomicity works even on NFS)
+//							record->report_access({ .comment=Comment::Encode , .digest=ad , .files={{decode_node,FileInfo()}} }) ; // report no access, but with create_encode flag
+//							goto Found ;                                                            // if sym_lnk succeeds, we have created the code (atomicity works even on NFS)
+//						} catch (::string const& e) {
 //							::string tgt = read_lnk({rfd,decode_node}) ;
-//							if (tgt==rel_data) goto Found ;                                                     // if decode_node already exists with the correct content, ...
-//						}                                                                                       // ... it has been created concurrently
+//							if (tgt==rel_data) goto Found ;                                         // if decode_node already exists with the correct content, it has been created concurrently
+//						}
 //					}
 //					throw "no available code"s ;
 //				Found :
-//					fi  = { {rfd,node} , {.sync_guard=&sync_guard} } ;                                          // update date after create
+//					fi  = { {rfd,node} , {.sync_guard=&sync_guard} } ;                              // update date after create
 //					res = ::move(code)   ;
 //				}
 //				// END_OF_VERSIONING
@@ -1253,48 +1218,10 @@ namespace Version {
 //		// END_OF_VERSIONING
 
 // *******************************************
-// * Repo : 7294200e7304181bb0f332bd092ffeec *
+// * Repo : 1e4f50b7fc829498e44e806260a4baa8 *
 // *******************************************
 //
-//	// START_OF_VERSIONING CACHE REPO JOB
-//		res << ':' ;
-//		if (auto_mkdir     ) res << 'm' ;
-//		if (disabled       ) res << 'd' ;
-//		if (readdir_ok     ) res << 'D' ;
-//		if (ignore_stat    ) res << 'i' ;
-//		if (io_uring_ok    ) res << 'I' ;
-//		if (mount_chroot_ok) res << 'M' ;
-//		if (ext_write_ok   ) res << 'W' ;
-//		if (deps_in_system ) res << 'x' ;
-//		if (ext_read_ok    ) res << 'X' ;
-//		switch (file_sync) {
-//			case FileSync::Auto    : res << "s?" ; break ;
-//			case FileSync::None    : res << "s-" ; break ;
-//			case FileSync::Dir     : res << "sd" ; break ;
-//			case FileSync::Readdir : res << "sr" ; break ;
-//			case FileSync::Afs     : res << "sa" ; break ;
-//			case FileSync::Beegfs  : res << "sb" ; break ;
-//			case FileSync::Ceph    : res << "sc" ; break ;
-//			case FileSync::Gpfs    : res << "sg" ; break ;
-//			case FileSync::Lustre  : res << "sl" ; break ;
-//			case FileSync::Nfs     : res << "sn" ; break ;
-//			case FileSync::Ocfs2   : res << "so" ; break ;
-//		DF}                                                // NO_COV
-//		switch (lnk_support) {
-//			case LnkSupport::None    : res << "ln" ; break ;
-//			case LnkSupport::File    : res << "lf" ; break ;
-//			case LnkSupport::Full    : res << "la" ; break ;
-//			case LnkSupport::FullExt : res << "lx" ; break ;
-//		DF} //! NO_COV                                                   empty_ok
-//		res <<':'<< '"'<<mk_printable<'"'>(                  fqdn               )<<'"' ;
-//		res <<':'<< '"'<<mk_printable<'"'>(                  tmp_dir_s          )<<'"' ;
-//		res <<':'<< '"'<<mk_printable<'"'>(                  repo_root_s        )<<'"' ;
-//		res <<':'<< '"'<<mk_printable<'"'>(                  sub_repo_s         )<<'"' ;
-//		res <<':'<<      mk_printable     (                  src_dirs_s  ,false )      ;
-//		res <<':'<<      mk_printable     (mk_vmap<::string>(codecs     ),false )      ;
-//		res <<':'<<      mk_printable     (                  views_s     ,false )      ;
-//		// END_OF_VERSIONING
-//		// START_OF_VERSIONING CACHE REPO
+//	// START_OF_VERSIONING CACHE REPO
 //		FileSig::FileSig(FileInfo const& fi) : FileSig{fi.tag()} {
 //			switch (fi.tag()) {
 //				case FileTag::None  :
@@ -1499,7 +1426,6 @@ namespace Version {
 //		// START_OF_VERSIONING CACHE REPO JOB
 //		bool                             auto_mkdir       = false ;                   // if true  <=> auto mkdir in case of chdir
 //		bool                             deps_in_system   = false ;                   // if false <=> system files are simple and not considered as deps
-//		bool                             disabled         = false ;                   // if true  <=> no automatic report
 //		bool                             ext_read_ok      = false ;                   // if true  <=> allow reading outside repo and source dirs
 //		bool                             ext_write_ok     = false ;                   // if true  <=> allow writing outside repo
 //		bool                             ignore_stat      = false ;                   // if true  <=> stat-like syscalls do not trigger dependencies
@@ -2587,6 +2513,10 @@ namespace Version {
 //	,	__readlink__chk                            , __readlinkat_chk
 //	,	__realpath_chk
 //	,	__xstat                , __xstat64
+//	,	getxattr               , lgetxattr
+//	,	listxattr              , llistxattr
+//	,	setxattr               , lsetxattr
+//	,	removexattr            , lremovexattr
 //	// lmake functions
 //	,	Analysis
 //	,	CheckDeps        , CheckTargets // not Chk... as name is seen by user
@@ -2778,48 +2708,10 @@ namespace Version {
 //	// END_OF_VERSIONING
 
 // ******************************************
-// * Job : c3cb74797eb4a2e0750eccbca00dce2d *
+// * Job : a918f883af798fa52565a32500aa68ca *
 // ******************************************
 //
-//	// START_OF_VERSIONING CACHE REPO JOB
-//		res << ':' ;
-//		if (auto_mkdir     ) res << 'm' ;
-//		if (disabled       ) res << 'd' ;
-//		if (readdir_ok     ) res << 'D' ;
-//		if (ignore_stat    ) res << 'i' ;
-//		if (io_uring_ok    ) res << 'I' ;
-//		if (mount_chroot_ok) res << 'M' ;
-//		if (ext_write_ok   ) res << 'W' ;
-//		if (deps_in_system ) res << 'x' ;
-//		if (ext_read_ok    ) res << 'X' ;
-//		switch (file_sync) {
-//			case FileSync::Auto    : res << "s?" ; break ;
-//			case FileSync::None    : res << "s-" ; break ;
-//			case FileSync::Dir     : res << "sd" ; break ;
-//			case FileSync::Readdir : res << "sr" ; break ;
-//			case FileSync::Afs     : res << "sa" ; break ;
-//			case FileSync::Beegfs  : res << "sb" ; break ;
-//			case FileSync::Ceph    : res << "sc" ; break ;
-//			case FileSync::Gpfs    : res << "sg" ; break ;
-//			case FileSync::Lustre  : res << "sl" ; break ;
-//			case FileSync::Nfs     : res << "sn" ; break ;
-//			case FileSync::Ocfs2   : res << "so" ; break ;
-//		DF}                                                // NO_COV
-//		switch (lnk_support) {
-//			case LnkSupport::None    : res << "ln" ; break ;
-//			case LnkSupport::File    : res << "lf" ; break ;
-//			case LnkSupport::Full    : res << "la" ; break ;
-//			case LnkSupport::FullExt : res << "lx" ; break ;
-//		DF} //! NO_COV                                                   empty_ok
-//		res <<':'<< '"'<<mk_printable<'"'>(                  fqdn               )<<'"' ;
-//		res <<':'<< '"'<<mk_printable<'"'>(                  tmp_dir_s          )<<'"' ;
-//		res <<':'<< '"'<<mk_printable<'"'>(                  repo_root_s        )<<'"' ;
-//		res <<':'<< '"'<<mk_printable<'"'>(                  sub_repo_s         )<<'"' ;
-//		res <<':'<<      mk_printable     (                  src_dirs_s  ,false )      ;
-//		res <<':'<<      mk_printable     (mk_vmap<::string>(codecs     ),false )      ;
-//		res <<':'<<      mk_printable     (                  views_s     ,false )      ;
-//		// END_OF_VERSIONING
-//		// START_OF_VERSIONING CACHE JOB REPO
+//	// START_OF_VERSIONING CACHE JOB REPO
 //		template<uint8_t Sz> _Crc<Sz>::_Crc( ::string const& filename , Disk::FileInfo&/*out*/ fi ) {
 //			// use low level operations to ensure no time-of-check-to time-of-use hasards as crc may be computed on moving files
 //			for(;;) {
@@ -2914,7 +2806,6 @@ namespace Version {
 //		// START_OF_VERSIONING CACHE REPO JOB
 //		bool                             auto_mkdir       = false ;                   // if true  <=> auto mkdir in case of chdir
 //		bool                             deps_in_system   = false ;                   // if false <=> system files are simple and not considered as deps
-//		bool                             disabled         = false ;                   // if true  <=> no automatic report
 //		bool                             ext_read_ok      = false ;                   // if true  <=> allow reading outside repo and source dirs
 //		bool                             ext_write_ok     = false ;                   // if true  <=> allow writing outside repo
 //		bool                             ignore_stat      = false ;                   // if true  <=> stat-like syscalls do not trigger dependencies
@@ -3129,6 +3020,10 @@ namespace Version {
 //	,	__readlink__chk                            , __readlinkat_chk
 //	,	__realpath_chk
 //	,	__xstat                , __xstat64
+//	,	getxattr               , lgetxattr
+//	,	listxattr              , llistxattr
+//	,	setxattr               , lsetxattr
+//	,	removexattr            , lremovexattr
 //	// lmake functions
 //	,	Analysis
 //	,	CheckDeps        , CheckTargets // not Chk... as name is seen by user

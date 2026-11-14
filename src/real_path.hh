@@ -73,30 +73,28 @@ public :
 	// src_dirs_s may be either absolute or relative, but must be canonic
 	// tmp_dir_s must be absolute and canonic
 	RealPath() = default ;
-	RealPath ( RealPathEnv const& rpe , pid_t p=0 ) ;
+	RealPath ( RealPathEnv const& , pid_t=0 ) ;
 	void operator>>(::string&) const ;
 	// services
-	FileLoc file_loc(::string const& real) const { return _env->file_loc(real) ; }
-	//
 	SolveReport solve( FileView , bool no_follow=false ) ;
 	//
 	::vmap_s<Accesses> exec(SolveReport&&) ;                          // arg is updated to reflect last interpreter
 	//
 	void chdir() ;
 	::string cwd() {
-		if ( !pid && ::getpid()!=_cwd_pid ) chdir() ;                 // refresh _cwd if it was updated in the child part of a clone
+		if ( !tid && ::getpid()!=_cwd_pid ) chdir() ;                 // refresh _cwd if it was updated in the child part of a clone
 		return _cwd ;
 	}
 private :
 	size_t _find_src_idx(::string const& real) const ;
 	// data
 public :
-	pid_t pid = 0 ;
+	pid_t tid = 0 ;
 private :
 	RealPathEnv const* _env            = nullptr ;
 	::vector_s         _abs_src_dirs_s ;                              // this is an absolute version of src_dirs
 	size_t             _repo_root_sz   = 0       ;
 	::string           _cwd            ;
-	pid_t              _cwd_pid        = 0       ;                    // pid for which _cwd is valid if pid==0
+	pid_t              _cwd_pid        = 0       ;                    // pid for which _cwd is valid if tid==0
 	SyncGuard          _nfs_guard      ;
 } ;

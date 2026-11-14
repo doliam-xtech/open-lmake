@@ -556,27 +556,22 @@ EOF
 HAS_SECCOMP=$(ok cc -c -o /dev/null -xc has_seccomp.c )
 
 #
-# EBPF (HAS_EBPF+BPF_CLANG+BPF_ARCH+BPF_INC_DIR)
+# EBPF (HAS_EBPF+EBPF_CLANG+EBPF_INC_DIR)
 #
 gather_ebpf_info() {
-	BPF_CLANG=${BPF_CLANG:-clang}
-	case "$(basename $BPF_CLANG)" in
+	EBPF_CLANG=${EBPF_CLANG:-clang}
+	case "$(basename $EBPF_CLANG)" in
 		clang* ) ;;
-		*      ) echo "\$BPF_CLANG=$BPF_CLANG cannot be recognized as a clang compiler" >>$ERR_FILE ; return 1 ;;
+		*      ) echo "\$EBPF_CLANG=$EBPF_CLANG cannot be recognized as a clang compiler" >>$ERR_FILE ; return 1 ;;
 	esac
-	BPF_CLANG=$( type -p $BPF_CLANG || : )
-	[ "$BPF_CLANG" ] || { echo $BPF_CLANG not found >>$ERR_FILE ; return 1 ; }
-	BPF_CLANG_VERSION=$($BPF_CLANG -dumpversion)                               # outputs either major version or full version, depending on flavors and versions
-	BPF_CLANG_VERSION=${BPF_CLANG_VERSION%%.*}                                                                                     # strip minor if present
-	[ "$BPF_CLANG_VERSION" ]        || { echo cannot determine version of $BPF_CLANG                    >>$ERR_FILE ; return 1 ; }
-	[[ $BPF_CLANG_VERSION -ge 20 ]] || { echo $BPF_CLANG version $BPF_CLANG_VERSION must be at least 20 >>$ERR_FILE ; return 1 ; }
+	EBPF_CLANG=$( type -p $EBPF_CLANG || : )
+	[ "$EBPF_CLANG" ] || { echo $EBPF_CLANG not found >>$ERR_FILE ; return 1 ; }
+	EBPF_CLANG_VERSION=$($EBPF_CLANG -dumpversion)                               # outputs either major version or full version, depending on flavors and versions
+	EBPF_CLANG_VERSION=${EBPF_CLANG_VERSION%%.*}                                                                                     # strip minor if present
+	[ "$EBPF_CLANG_VERSION" ]        || { echo cannot determine version of $EBPF_CLANG                     >>$ERR_FILE ; return 1 ; }
+	[[ $EBPF_CLANG_VERSION -ge 20 ]] || { echo $EBPF_CLANG version $EBPF_CLANG_VERSION must be at least 20 >>$ERR_FILE ; return 1 ; }
 
-	case $(uname -m) in
-		x86_64 ) BPF_ARCH=x86   ;;
-		aarch64) BPF_ARCH=arm64 ;;
-		*      ) echo cannot determine arch >>$ERR_FILE ; return 1 ;;
-	esac
-	BPF_INC_DIR=$($BPF_CLANG -E -v -xc - </dev/null 2>&1 | grep '^ /usr/include/' | sed 's: ::') # asm/types.h lies in the multi-arch dir, which is not searched when targeting bpf
+	EBPF_INC_DIR=$($EBPF_CLANG -E -v -xc - </dev/null 2>&1 | grep '^ /usr/include/' | sed 's: ::') # asm/types.h lies in the multi-arch dir, which is not searched when targeting bpf
 	# find a bpftool able to dump the running kernel BTF (the distro one may not support the running kernel, e.g. under WSL)
 	BPFTOOL=
 	for bt in bpftool /usr/sbin/bpftool /usr/lib/linux-tools/*/bpftool /usr/lib/linux-tools-*/bpftool ; do
@@ -611,9 +606,9 @@ gather_ebpf_info() {
 			return o==nullptr || rb==nullptr ;
 		}
 	EOF
-			$BPFTOOL btf dump file /sys/kernel/btf/vmlinux format c >vmlinux.h 2>/dev/null                                                 \
-		&&	$BPF_CLANG -g -O3 -target bpf -D__TARGET_ARCH_$BPF_ARCH -I. -I$BPF_INC_DIR -c -o has_ebpf.bpf.o has_ebpf.bpf.c >/dev/null 2>&1 \
-		&&	cc -std=$CXX_STD -o /dev/null has_ebpf.cc -lbpf                                                                                \
+			$BPFTOOL btf dump file /sys/kernel/btf/vmlinux format c >vmlinux.h 2>/dev/null                                                   \
+		&&	$EBPF_CLANG -g -O3 -target bpf -DTARGET_ARCH_$(uname -m) -I. -I$EBPF_INC_DIR -c -o has_ebpf.bpf.o has_ebpf.bpf.c >/dev/null 2>&1 \
+		&&	cc -std=$CXX_STD -o /dev/null has_ebpf.cc -lbpf                                                                                  \
 	||	{ echo cannot compile trial ebpf >>$ERR_FILE ; return 1 ; }
 	case $LMAKE_FLAGS in
 		*E* ) ;;
@@ -724,9 +719,8 @@ cat >$MK_FILE <<-EOF
 	LMAKE_FLAGS   := $LMAKE_FLAGS
 	#
 	BASH                      := /bin/bash
-	BPF_ARCH                  := $BPF_ARCH
-	BPF_CLANG                 := $BPF_CLANG
-	BPF_INC_DIR               := $BPF_INC_DIR
+	EBPF_CLANG                := $EBPF_CLANG
+	EBPF_INC_DIR              := $EBPF_INC_DIR
 	BPFTOOL                   := $BPFTOOL
 	CXX                       := $CXX
 	CXX_FLAVOR                := $CXX_FLAVOR

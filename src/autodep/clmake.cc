@@ -9,7 +9,6 @@
 #include "hash.hh"
 #include "time.hh"
 
-#include "backdoor.hh"
 #include "env.hh"
 #include "job_support.hh"
 #include "record.hh"
@@ -90,10 +89,11 @@ static Ptr<> _depend( Tuple const& py_args , Dict const& py_kwds ) {
 		throw "unexpected keyword arg "+key ;
 	}
 	//
-	//
 	::pair<::vector<VerboseInfo>,bool/*ok*/> dep_infos ;
-	try                       { dep_infos = JobSupport::depend( ::copy(files) , ad , no_follow , regexpr , direct , verbose ) ; }
-	catch (::string const& e) { throw ::pair(PyException::ValueErr,e) ;                                                         }
+	//                vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+	try { dep_infos = JobSupport::depend( ::copy(files) , ad , no_follow , regexpr , direct , verbose ) ; }
+	//                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+	catch (::string const& e) { throw ::pair(PyException::ValueErr,e) ; }
 	//
 	if (!(verbose||direct)) return &None ;
 	//
@@ -138,9 +138,10 @@ static void _target( Tuple const& py_args , Dict const& py_kwds ) {
 		else if (can_mk_enum<ExtraDflag>(key)) {      ExtraDflag edf=mk_enum<ExtraDflag>(key) ;                    ad.flags.extra_dflags.set(edf,val) ; continue ;   }
 		throw "unexpected keyword arg "+key ;
 	}
-	//
-	try                       { JobSupport::target( ::move(files) , ad , no_follow , regexpr ) ; }
-	catch (::string const& e) { throw ::pair(PyException::ValueErr,e) ;                          }
+	//    vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+	try { JobSupport::target( ::move(files) , ad , no_follow , regexpr ) ; }
+	//    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+	catch (::string const& e) { throw ::pair(PyException::ValueErr,e) ; }
 }
 
 static Ptr<> _chk_deps( Tuple const& py_args , Dict const& py_kwds ) {
@@ -165,8 +166,10 @@ static Ptr<> _chk_deps( Tuple const& py_args , Dict const& py_kwds ) {
 	}
 	//
 	try {
-		bool  is_sync = sync.value_or(false)                                      ;
-		Bool3 ok      = JobSupport::chk_deps( delay.value_or(Delay()) , is_sync ) ;
+		bool  is_sync = sync.value_or(false) ;
+		//         vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+		Bool3 ok = JobSupport::chk_deps( delay.value_or(Delay()) , is_sync ) ;
+		//         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 		if (!is_sync) return &None ;
 		throw_if(ok==Maybe,"some deps are out-of-date") ; // in case handler catches killing signal as job will be killed in that case
 		return Ptr<Bool>(ok==Yes) ;
@@ -196,9 +199,10 @@ template<bool Target> static Ptr<Tuple> _list( Tuple const& py_args , Dict const
 		throw "unexpected keyword arg "+key ;
 	}
 	//
-	try {
+	try { //!              vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
 		::vector_s files = JobSupport::list( No|Target , ::move(dir) , ::move(regexpr) ) ;
-		Ptr<Tuple> res   { files.size() }                                                ;
+		//                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+		Ptr<Tuple> res { files.size() } ;
 		for( size_t i : iota(files.size()) ) res->set_item( i , *Ptr<Str>(files[i]) ) ;
 		return res ;
 	} catch (::string const& e) {
@@ -208,8 +212,10 @@ template<bool Target> static Ptr<Tuple> _list( Tuple const& py_args , Dict const
 
 static Ptr<Str> _list_root_s( Tuple const& py_args , Dict const& py_kwds ) {
 	if (!( py_args.size()==1 && !py_kwds )) throw cat("accept only a single arg") ;
-	try                       { return Ptr<Str>( no_slash( JobSupport::list_root_s(*py_args[0].str()) ) ) ; }
-	catch (::string const& e) { throw ::pair(PyException::RuntimeErr,e) ;                                   }
+	//                               vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+	try { return Ptr<Str>( no_slash( JobSupport::list_root_s(*py_args[0].str()) ) ) ; }
+	//                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+	catch (::string const& e) { throw ::pair(PyException::RuntimeErr,e) ; }
 }
 
 // encode and decode are very similar, it is easier to define a template for both
@@ -254,10 +260,10 @@ template<bool Encode> static Ptr<> _codec( Tuple const& py_args , Dict const& py
 	if (!Encode) throw_if    ( +min_len , "unexpected arg min_len" ) ;
 	//
 	try {
-		::string res =
+		::string res = //!vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
 			Encode ? JobSupport::encode( ::move(*tab) , ::move(*ctx) , ::move(*cv/*val*/ ) , min_len.value_or(1) , version.value_or(0) )
 			:        JobSupport::decode( ::move(*tab) , ::move(*ctx) , ::move(*cv/*code*/)                       , version.value_or(0) )
-		;
+		; //!        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 		if (cv_is_bytes) return Ptr<Bytes>(res) ;
 		else             return Ptr<Str  >(res) ;
 	} catch (::string const& e) {
@@ -285,9 +291,9 @@ template<bool IsFile> static Ptr<Str> _xxhsum( Tuple const& py_args , Dict const
 
 static Ptr<Bool> _get_autodep( Tuple const& py_args , Dict const& py_kwds ) {
 	if ( +py_args || +py_kwds ) throw "expected no args"s ;
-	//     vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
-	return Backdoor::call(Backdoor::Enable()) ;
-	//     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+	//     vvvvvvvvvvvvvvvvvvvvvvvv
+	return JobSupport::get_enable() ;
+	//     ^^^^^^^^^^^^^^^^^^^^^^^^
 }
 
 static void _set_autodep( Tuple const& py_args , Dict const& py_kwds ) {
@@ -296,9 +302,9 @@ static void _set_autodep( Tuple const& py_args , Dict const& py_kwds ) {
 	if (+py_kwds) throw "unexpected keyword args"s ;
 	if (n_args>1) throw "too many args"s           ;
 	if (n_args<1) throw "missing arg"s             ;
-	//vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
-	Backdoor::call(Backdoor::Enable{No|+py_args[0]}) ;
-	//^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+	//vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+	JobSupport::set_enable(+py_args[0]) ;
+	//^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 }
 
 template<bool EmptyIsDot> static ::vector_s _get_seq( ::string const& key , Object const& py_val ) {
@@ -356,7 +362,9 @@ static void _report_import( Tuple const& py_args , Dict const& py_kwds ) {
 	else                             path = _get_seq<true    >("sys.path",py_get_sys("path")) ;
 	for( ::string& d : path ) rm_slash(d) ;
 	#if PY_MAJOR_VERSION>=3
+		//                          vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
 		try                       { JobSupport::depend( ::copy(path) , {.flags{.extra_dflags=ExtraDflag::ReaddirOk}} , false/*no_follow*/ ) ; } // python3 reads dirs in path
+		//                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 		catch (::string const& e) { throw ::pair(PyException::ValueErr,e) ;                                                                   }
 	#endif
 	//
@@ -550,7 +558,7 @@ PyMODINIT_FUNC
 	} ;
 	#undef F
 	try {
-		_g_record = new Record { New , Yes/*enabled*/ } ;
+		_g_record = new Record {New} ;
 	} catch (::string const& e) {
 		#if PY_MAJOR_VERSION>=3
 			return py_err_set( PyException::FileNotFoundErr , e ) ;

@@ -24,7 +24,7 @@ void* get_orig(const char* libcall) {
 	return entry.orig ;
 }
 
-inline bool started() { return true ; }
+inline bool active() { return true ; }
 
 #include "ld_common.x.cc"
 

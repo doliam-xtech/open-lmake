@@ -222,9 +222,9 @@ int main( int argc , char* argv[] ) {
 		//
 		g_start_info = get_start_info() ; if (!g_start_info) return 0 ;                                                                  // if !g_start_info, server ask us to give up
 		try                       { g_start_info.mk_canon( g_phy_repo_root_s ) ;                                              }
-		catch (::string const& e) { end_report.msg_stderr.msg += e ; goto End ;                                               }          // NO_COV defensive programming
+		catch (::string const& e) { end_report.msg_stderr.msg << add_nl<<e ; goto End ;                                       }          // NO_COV defensive programming
 		try                       { g_start_info.autodep_env.file_sync = auto_file_sync(g_start_info.autodep_env.file_sync) ; }
-		catch (::string const& e) { end_report.msg_stderr.msg += e ; goto End ;                                               }          // NO_COV defensive programming
+		catch (::string const& e) { end_report.msg_stderr.msg << add_nl<<e ; goto End ;                                       }          // NO_COV defensive programming
 		//
 		g_user_trace->emplace_back( New/*date*/ , Comment::Fqdn , CommentExts() , g_start_info.autodep_env.fqdn ) ;
 		//
@@ -233,10 +233,10 @@ int main( int argc , char* argv[] ) {
 		::vector_s washed_files ;
 		//
 		try {
-			end_report.msg_stderr.msg += with_nl(do_file_actions( /*out*/washed_files , /*out*/incremental , ::move(g_start_info.pre_actions) , &sync_guard )) ;
+			end_report.msg_stderr.msg <<add_nl<< do_file_actions( /*out*/washed_files , /*out*/incremental , ::move(g_start_info.pre_actions) , &sync_guard ) ;
 		} catch (::string const& e) {                                                                                                    // START_OF_NO_COV defensive programming
 			trace("bad_file_actions",e) ;
-			end_report.msg_stderr.msg += e                   ;
+			end_report.msg_stderr.msg << add_nl<<e           ;
 			end_report.digest.status   = Status::LateLostErr ;
 			goto End ;
 		}                                                                                                                                // END_OF_NO_COV
@@ -260,7 +260,7 @@ int main( int argc , char* argv[] ) {
 			g_start_info.env.pop_back() ;
 		}
 		if (!is_abs(end_report.phy_tmp_dir_s)) {
-			end_report.msg_stderr.msg << "$TMPDIR ("<<end_report.phy_tmp_dir_s<<") passed from "<<from<<" must be absolute" ;
+			end_report.msg_stderr.msg << add_nl<<"$TMPDIR ("<<end_report.phy_tmp_dir_s<<") passed from "<<from<<" must be absolute" ;
 			goto End ;
 		}
 		//
@@ -281,7 +281,7 @@ int main( int argc , char* argv[] ) {
 			,	         *g_lmake_root_s
 			) ;
 		} catch (::string const& e) {
-			end_report.msg_stderr.msg += e ;
+			end_report.msg_stderr.msg << add_nl<<e ;
 			goto End ;
 		}
 		{	RealPath real_path { g_start_info.autodep_env } ;
@@ -366,7 +366,7 @@ int main( int argc , char* argv[] ) {
 			//       ^^^^^^^^^^^^^^^^^^^^^
 		} catch (::string const& e) {                                                                                               // START_OF_NO_COV defensive programming
 			end_report.digest.status = g_gather.started() ? Status::LateLost : Status::EarlyLost ;                                  // not early as soon as job is started
-			end_report.msg_stderr.msg << "open-lmake error : " << e ;
+			end_report.msg_stderr.msg << add_nl<<"open-lmake error : "<<e ;
 			goto End ;
 		}                                                                                                                           // END_OF_NO_COV
 		struct ::rusage rsrcs ; ::getrusage(RUSAGE_CHILDREN,&rsrcs) ;
@@ -383,7 +383,7 @@ int main( int argc , char* argv[] ) {
 		::string crc_msg = compute_crcs( digest , /*out*/end_report.total_sz ) ;
 		//                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 		if ( status==Status::Ok && +crc_msg ) { status = Status::Forbidden ; do_upload = false ; }
-		end_report.msg_stderr.msg <<add_nl<< ::move(crc_msg) ;
+		end_report.msg_stderr.msg <<add_nl<<::move(crc_msg) ;
 		//
 		if (do_upload) {                                                                                                            // jobs in error are not cached
 			trace("cache_addr",g_start_info.cache.service.addr) ;
@@ -401,7 +401,7 @@ int main( int argc , char* argv[] ) {
 				trace("cache",upload_key) ;
 			} catch (::string const& e) {
 				trace("cache_upload_throw",e) ;
-				end_report.msg_stderr.msg <<"cannot upload to cache : "<<e<<'\n' ;
+				end_report.msg_stderr.msg << add_nl<<"cannot upload to cache : "<<e ;
 			}
 			CommentExts ces ; if (!upload_key) ces |= CommentExt::Err ;
 			g_user_trace->emplace_back( New/*date*/ , Comment::UploadedToCache , ces , cat(g_start_info.zlvl) ) ;
@@ -414,8 +414,8 @@ int main( int argc , char* argv[] ) {
 		//
 		if ( status==Status::Ok && ( +digest.msg || (+g_gather.stderr&&!g_start_info.stderr_ok) ) ) status = Status::Forbidden ;
 		//
-		/**/                        end_report.msg_stderr.msg += g_gather.msg ;
-		if (status!=Status::Killed) end_report.msg_stderr.msg += digest  .msg ;
+		/**/                        end_report.msg_stderr.msg << add_nl<<g_gather.msg ;
+		if (status!=Status::Killed) end_report.msg_stderr.msg << add_nl<<digest  .msg ;
 		JobStats stats {
 			.mem = size_t(rsrcs.ru_maxrss<<10)
 		,	.cpu = Delay(rsrcs.ru_utime) + Delay(rsrcs.ru_stime)

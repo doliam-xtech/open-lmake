@@ -235,6 +235,10 @@ enum class Comment : uint8_t {
 ,	__readlink__chk                            , __readlinkat_chk
 ,	__realpath_chk
 ,	__xstat                , __xstat64
+,	getxattr               , lgetxattr
+,	listxattr              , llistxattr
+,	setxattr               , lsetxattr
+,	removexattr            , lremovexattr
 // lmake functions
 ,	Analysis
 ,	CheckDeps        , CheckTargets // not Chk... as name is seen by user

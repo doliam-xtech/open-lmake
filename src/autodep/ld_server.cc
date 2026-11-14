@@ -12,7 +12,7 @@
 thread_local bool                     AutodepLock::t_active = false ;
 /**/         Mutex<MutexLvl::Autodep> AutodepLock::_s_mutex ;
 
-inline bool started() { return AutodepLock::t_active ; } // no auto-start for server
+inline bool active() { return AutodepLock::t_active ; } // no auto-start for server
 
 // when in server, we must have a complete redirection table because :
 // - dlsym takes an internal lock

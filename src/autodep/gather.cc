@@ -558,16 +558,22 @@ Fd Gather::_spawn_child() {
 	//
 	Trace trace("_spawn_child",child_stdin,child_stdout,child_stderr,method,autodep_env) ;
 	//
-	_add_env          = { {"LMAKE_AUTODEP_ENV",autodep_env} } ;                                    // required even with method==None or ptrace to allow support (ldepend, lmake module, ...) to work
-	_child.cmd_line   = cmd_line                              ;
-	_child.env        = env                                   ;
-	_child.add_env    = &_add_env                             ;
-	_child.cwd_s      = autodep_env.sub_repo_s                ;
-	_child.as_session = as_session                            ;
-	_child.nice       = nice                                  ;
-	_child.stdin      = child_stdin                           ;
-	_child.stdout     = child_stdout                          ;
-	_child.stderr     = child_stderr                          ;
+	_add_env = {
+		{ "LMAKE_AUTODEP_ENV"         , autodep_env                     } // required even with method==None or ptrace to allow support (ldepend, lmake module, ...) to work
+	,	{ "LMAKE_LD_AUDIT"            , "_d$LIB/ld_audit.so"            } // simplify user life if they must set LD_AUDIT/LD_PRELOAD (e.g. in case of ssh) even with another method
+	,	{ "LMAKE_LD_PRELOAD"          , "_d$LIB/ld_preload.so"          } // .
+	,	{ "LMAKE_LD_PRELOAD_JEMALLOC" , "_d$LIB/ld_preload_jemalloc.so" } // .
+	,	{ "LMAKE_RUNNING"             , "1"                             }
+	} ;
+	_child.cmd_line   = cmd_line               ;
+	_child.env        = env                    ;
+	_child.add_env    = &_add_env              ;
+	_child.cwd_s      = autodep_env.sub_repo_s ;
+	_child.as_session = as_session             ;
+	_child.nice       = nice                   ;
+	_child.stdin      = child_stdin            ;
+	_child.stdout     = child_stdout           ;
+	_child.stderr     = child_stderr           ;
 	// PER_AUTODEP_METHOD : handle case
 Retry :
 	start_date = New ;                                                                             // record job start time as late as possible
@@ -580,8 +586,8 @@ Retry :
 			case AutodepMethod::Ebpf :
 				Record::s_autodep_env(::copy(autodep_env)) ;
 				_child.pre_exec = AutodepEbpf::s_prepare_child ;
-				_ebpf_tracer    = AutodepEbpf(self)            ;
-				res             = _ebpf_tracer.epoll_fd()      ;
+				_ebpf_tracer.init(self) ;
+				res = _ebpf_tracer.epoll_fd() ;
 				break ;
 		#endif
 		/**/             case AutodepMethod::Ptrace  :
@@ -617,7 +623,7 @@ Retry :
 	_child.spawn() ;
 	//^^^^^^^^^^^^
 	trace("child_pid",_child.pid) ;
-	return res ;                                                                                    // used with seccomp and ptrace
+	return res ;                                                                                   // used with seccomp and ptrace
 }
 
 Status Gather::exec_child() {
@@ -875,7 +881,8 @@ Status Gather::_exec_child() {
 				} break ;
 				#if HAS_EBPF
 					case Kind::EbpfEvent :
-						_ebpf_tracer.consume() ;
+						try                       { _ebpf_tracer.consume() ; }
+						catch (::string const& e) { panic( New , e ) ;       }
 					break ;
 				#endif
 				case Kind::ChildEnd   :
@@ -884,17 +891,20 @@ Status Gather::_exec_child() {
 					else                        { int cnt=::read(fd,&::ref(char()),1) ; SWEAR(cnt==1,cnt) ; _child.waited() ; } // wstatus is already set, _child was waited for, just flush fd
 					#if HAS_EBPF
 						if (+_ebpf_tracer) {
-							if (!_ebpf_tracer.consume()) panic( New , "ebpf queue overflow" ) ; // ebpf reporting should be complete (after having been flushed) once child is ended
+							bool done = true ;
+							try                       { done = _ebpf_tracer.consume() ; }
+							catch (::string const& e) { panic( New , e ) ;              }
+							if (!done) panic( New , "ebpf queue overflow" ) ;             // ebpf reporting should be complete (after having been flushed) once child is ended
 							epoll.del( false/*write*/ , _ebpf_tracer.epoll_fd() ) ;
 						}
 					#endif
 					int ws = wstatus ;
 					trace(kind,fd,_child.pid,ws) ;
-					SWEAR_PROD( !WIFSTOPPED(ws) , kind,ws,_child.pid ) ;               // child must have ended if we are here
+					SWEAR_PROD( !WIFSTOPPED(ws) , kind,ws,_child.pid ) ;                  // child must have ended if we are here
 					//
 					end_date   = New                                 ;
 					_wait     &= ~Kind::ChildEnd                     ;
-					end_child  = end_date + network_delay + Delay(1) ;                 // wait at most network_delay (+ 1s for our own processing) for reporting & stdout & stderr to settle down
+					end_child  = end_date + network_delay + Delay(1) ;                    // wait at most network_delay (+ 1s for our own processing) for reporting & stdout & stderr to settle down
 					_user_trace( end_date , Comment::EndJob , to_hex(uint16_t(ws)) ) ;
 					//
 					if (WIFEXITED(ws)) {
