@@ -67,7 +67,7 @@ This is a non-intrusive approach : the job is not modified in any way and all ac
 As accesses are observed and not intercepted, features that need to act before a system call executes are not supported (`auto_mkdir`).
 
 The major drawback is linked to security : installing a eBPF filter requires to be privileged, which implies the presence of a root daemon (`_bin/lmake_ebpfd`) that jobs connect to.
-At start-up, this daemon checks that the kernel hooks it relies on are operational, and refuses to run if not.
+At start-up, this daemon checks that the kernel hooks it relies on are operational, and refuses to run if they are not.
 
 ### ptrace
 

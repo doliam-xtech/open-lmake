@@ -10,12 +10,16 @@ Job are executed by calling the provided interpreter (generally python or bash).
 When calling the interpreter, the following environment variable are automatically set, in addition to what is mentioned in the `environ` attribute (and the like).
 They must remain untouched:
 
-| Variable             | Description                                                                                                                                               |
-| ---------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `$LD_AUDIT`          | a variable necessary for [autodep](autodep.html#:~:text=%24LD%5FAUDIT)   when the `autodep` attribute is set to `'ld_audit'`                              |
-| `$LD_PRELOAD`        | a variable necessary for [autodep](autodep.html#:~:text=%24LD%5FPRELOAD) when the `autodep` attribute is set to `'ld_preload'` or `'ld_preload_jemalloc'` |
-| `$LMAKE_AUTODEP_ENV` | a variable necessary for [autodep](autodep.html) in all cases even when the `autodep` attribute is set to `'none'`                                        |
-| `$TMPDIR`            | the name of a dir which is empty at the start of the job                                                                                                  |
+| Variable                     | Description                                                                                                                                                         |
+| -----------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `$LD_AUDIT`                  | a variable necessary for [autodep](autodep.html#:~:text=%24LD%5FAUDIT)   when the `autodep` attribute is set to `'ld_audit'`                                        |
+| `$LD_PRELOAD`                | a variable necessary for [autodep](autodep.html#:~:text=%24LD%5FPRELOAD) when the `autodep` attribute is set to `'ld_preload'` or `'ld_preload_jemalloc'`           |
+| `$LMAKE_RUNNING`             | a variable whose only purpose is to tel user code it is running under open-lmak control                                                                             |
+| `$LMAKE_LD_AUDIT`            | a variable to be copied to `$LD_AUDIT`   in the spawned environment in case of remote sub-process (e.g. through ssh) to be tracked as if with `ld_audit`            |
+| `$LMAKE_LD_PRELOAD`          | a variable to be copied to `$LD_PRELOAD` in the spawned environment in case of remote sub-process (e.g. through ssh) to be tracked as if with `ld_preload`          |
+| `$LMAKE_LD_PRELOAD_JEMALLOC` | a variable to be copied to `$LD_PRELOAD` in the spawned environment in case of remote sub-process (e.g. through ssh) to be tracked as if with `ld_preload_jemalloc` |
+| `$LMAKE_AUTODEP_ENV`         | a variable necessary for [autodep](autodep.html) in all cases even when the `autodep` attribute is set to `'none'` (must be forward in case of remote sub-process)  |
+| `$TMPDIR`                    | the name of a dir which is empty at the start of the job                                                                                                            |
 
 The following environment variables are provided by default but may be overridden by the rule attributes or within `cmd`:
 

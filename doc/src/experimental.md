@@ -13,3 +13,5 @@ If you plan to use one of those, best is to be in contact with the development t
 - make necessary evolutions so as to fit your needs as they appear
 
 As a consequence, it is most probable that the specifications will evolve in a non-backward compatible way.
+
+## autodep = 'ebpf'

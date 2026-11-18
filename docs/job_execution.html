@@ -163,7 +163,11 @@ They must remain untouched:</p>
 <div class="table-wrapper"><table><thead><tr><th>Variable</th><th>Description</th></tr></thead><tbody>
 <tr><td><code>$LD_AUDIT</code></td><td>a variable necessary for <a href="autodep.html#:~:text=%24LD%5FAUDIT">autodep</a>   when the <code>autodep</code> attribute is set to <code>'ld_audit'</code></td></tr>
 <tr><td><code>$LD_PRELOAD</code></td><td>a variable necessary for <a href="autodep.html#:~:text=%24LD%5FPRELOAD">autodep</a> when the <code>autodep</code> attribute is set to <code>'ld_preload'</code> or <code>'ld_preload_jemalloc'</code></td></tr>
-<tr><td><code>$LMAKE_AUTODEP_ENV</code></td><td>a variable necessary for <a href="autodep.html">autodep</a> in all cases even when the <code>autodep</code> attribute is set to <code>'none'</code></td></tr>
+<tr><td><code>$LMAKE_RUNNING</code></td><td>a variable whose only purpose is to tel user code it is running under open-lmak control</td></tr>
+<tr><td><code>$LMAKE_LD_AUDIT</code></td><td>a variable to be copied to <code>$LD_AUDIT</code>   in the spawned environment in case of remote sub-process (e.g. through ssh) to be tracked as if with <code>ld_audit</code></td></tr>
+<tr><td><code>$LMAKE_LD_PRELOAD</code></td><td>a variable to be copied to <code>$LD_PRELOAD</code> in the spawned environment in case of remote sub-process (e.g. through ssh) to be tracked as if with <code>ld_preload</code></td></tr>
+<tr><td><code>$LMAKE_LD_PRELOAD_JEMALLOC</code></td><td>a variable to be copied to <code>$LD_PRELOAD</code> in the spawned environment in case of remote sub-process (e.g. through ssh) to be tracked as if with <code>ld_preload_jemalloc</code></td></tr>
+<tr><td><code>$LMAKE_AUTODEP_ENV</code></td><td>a variable necessary for <a href="autodep.html">autodep</a> in all cases even when the <code>autodep</code> attribute is set to <code>'none'</code> (must be forward in case of remote sub-process)</td></tr>
 <tr><td><code>$TMPDIR</code></td><td>the name of a dir which is empty at the start of the job</td></tr>
 </tbody></table>
 </div>

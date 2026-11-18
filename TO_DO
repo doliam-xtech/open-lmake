@@ -415,11 +415,6 @@ X manage HUGE pages in store
 * DOC
 ****************************************************************************************************
 
-* document LMAKE_LD_AUDIT, LMAKE_LD_PRELOAD and LMAKE_LD_PRELOAD_JEMALLOC
-	- so LD_AUDIT or LD_PRELOAD can be easily set in case of ssh
-* document LMAKE_RUNNING
-	- tell job it is running under lmake control
-	- ideally, it should not exist, but may be useful in some edge cases
 * give an example of Rule using the paths attribute
 *! make a tutorial
 ? add hard limits

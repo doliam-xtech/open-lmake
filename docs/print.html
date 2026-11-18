@@ -491,6 +491,7 @@ In our example, we have <code>File</code> and <code>Test</code>.</p>
 </li>
 <li>you can type <code>make LMAKE</code> to just build all necessary files</li>
 <li>you can type <code>make lmake.tar.gz.SUMMARY</code> (built by default) to make a tar ball of the compiled files that you can easily deploy</li>
+<li>if <code>E</code> is present in <code>$LMAKE_FLAGS</code> (experimental), then <code>make</code> issues a <code>sudo</code> to generate the suid root ebpf daemon, which may ask for a password</li>
 </ul>
 </li>
 <li>install
@@ -532,7 +533,7 @@ For example, <code>slurm.h</code> will be found as <code>$SLURM_ROOT/include/slu
 <li>St      controls the <code>-fsanitize=thread</code>                       option  (exclusive with Sa                                                             )</li>
 <li>P       controls the <code>-pg</code>                                     option  (profiling info is in gmon.out.<tool>.<pid>                                    )</li>
 <li>C       controls the <code>--coverage</code>                              option  (profiling info is in gmon.out.<tool>.<pid>                                    )</li>
-<li>E       controls whether to install ebpf (for dev only, work in progress)</li>
+<li>E       controls whether to install ebpf (experimental)</li>
 </ul>
 </li>
 <li>the <code>-j</code> flag of make is automatically set to the number of processors, you may want to override this, though</li>
@@ -2631,7 +2632,11 @@ They must remain untouched:</p>
 <div class="table-wrapper"><table><thead><tr><th>Variable</th><th>Description</th></tr></thead><tbody>
 <tr><td><code>$LD_AUDIT</code></td><td>a variable necessary for <a href="autodep.html#:~:text=%24LD%5FAUDIT">autodep</a>   when the <code>autodep</code> attribute is set to <code>'ld_audit'</code></td></tr>
 <tr><td><code>$LD_PRELOAD</code></td><td>a variable necessary for <a href="autodep.html#:~:text=%24LD%5FPRELOAD">autodep</a> when the <code>autodep</code> attribute is set to <code>'ld_preload'</code> or <code>'ld_preload_jemalloc'</code></td></tr>
-<tr><td><code>$LMAKE_AUTODEP_ENV</code></td><td>a variable necessary for <a href="autodep.html">autodep</a> in all cases even when the <code>autodep</code> attribute is set to <code>'none'</code></td></tr>
+<tr><td><code>$LMAKE_RUNNING</code></td><td>a variable whose only purpose is to tel user code it is running under open-lmak control</td></tr>
+<tr><td><code>$LMAKE_LD_AUDIT</code></td><td>a variable to be copied to <code>$LD_AUDIT</code>   in the spawned environment in case of remote sub-process (e.g. through ssh) to be tracked as if with <code>ld_audit</code></td></tr>
+<tr><td><code>$LMAKE_LD_PRELOAD</code></td><td>a variable to be copied to <code>$LD_PRELOAD</code> in the spawned environment in case of remote sub-process (e.g. through ssh) to be tracked as if with <code>ld_preload</code></td></tr>
+<tr><td><code>$LMAKE_LD_PRELOAD_JEMALLOC</code></td><td>a variable to be copied to <code>$LD_PRELOAD</code> in the spawned environment in case of remote sub-process (e.g. through ssh) to be tracked as if with <code>ld_preload_jemalloc</code></td></tr>
+<tr><td><code>$LMAKE_AUTODEP_ENV</code></td><td>a variable necessary for <a href="autodep.html">autodep</a> in all cases even when the <code>autodep</code> attribute is set to <code>'none'</code> (must be forward in case of remote sub-process)</td></tr>
 <tr><td><code>$TMPDIR</code></td><td>the name of a dir which is empty at the start of the job</td></tr>
 </tbody></table>
 </div>
@@ -3125,7 +3130,7 @@ Files that can be neither deps nor targets (the vast majority, such as those lyi
 <p>This is a non-intrusive approach : the job is not modified in any way and all accesses are seen, including those from statically linked programs and those done through <code>io_uring</code>.
 As accesses are observed and not intercepted, features that need to act before a system call executes are not supported (<code>auto_mkdir</code>).</p>
 <p>The major drawback is linked to security : installing a eBPF filter requires to be privileged, which implies the presence of a root daemon (<code>_bin/lmake_ebpfd</code>) that jobs connect to.
-At start-up, this daemon checks that the kernel hooks it relies on are operational, and refuses to run if not.</p>
+At start-up, this daemon checks that the kernel hooks it relies on are operational, and refuses to run if they are not.</p>
 <h3 id="ptrace"><a class="header" href="#ptrace">ptrace</a></h3>
 <p>The principle is to use <a href="https://man7.org/linux/man-pages/man2/ptrace.2.html"><code>ptrace</code></a> (the system call used by the <code>strace</code> utility) to spy user code activity.</p>
 <p>This is almost non-intrusive except that job cannot use strace for its own use.
@@ -3625,6 +3630,7 @@ They are:</p>
 <li>make necessary evolutions so as to fit your needs as they appear</li>
 </ul>
 <p>As a consequence, it is most probable that the specifications will evolve in a non-backward compatible way.</p>
+<h2 id="autodep--ebpf"><a class="header" href="#autodep--ebpf">autodep = 'ebpf'</a></h2>
 <div style="break-before: page; page-break-before: always;"></div><!-- This file is part of the open-lmake distribution (git@github.com:cesar-douady/open-lmake.git)-->
 <!-- Copyright (c) 2023-2026 Doliam-->
 <!-- This program is free software: you can redistribute/modify under the terms of the GPL-v3 (https://www.gnu.org/licenses/gpl-3.0.html).-->

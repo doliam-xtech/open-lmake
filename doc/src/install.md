@@ -50,6 +50,7 @@ It has been tested with the dockers listed in the docker dir.
 		- and generally speaking, make is not robust to past history, so a full 'git clean -fdx' may be necessary to get a reliable build
 	- you can type `make LMAKE` to just build all necessary files
 	- you can type `make lmake.tar.gz.SUMMARY` (built by default) to make a tar ball of the compiled files that you can easily deploy
+	- if `E` is present in `$LMAKE_FLAGS` (experimental), then `make` issues a `sudo` to generate the suid root ebpf daemon, which may ask for a password
 - install
 	- untar `lmake.tar.gz` wherever you want and have your `$PATH` point to the `bin` dir.
 		- the `bin` sub-dir contains the executables meant to be executed by the user
@@ -77,7 +78,7 @@ It has been tested with the dockers listed in the docker dir.
 			- St      controls the `-fsanitize=thread`                       option  (exclusive with Sa                                                             )
 			- P       controls the `-pg`                                     option  (profiling info is in gmon.out.<tool>.<pid>                                    )
 			- C       controls the `--coverage`                              option  (profiling info is in gmon.out.<tool>.<pid>                                    )
-			- E       controls whether to install ebpf (for dev only, work in progress)
+			- E       controls whether to install ebpf (experimental)
 		- the `-j` flag of make is automatically set to the number of processors, you may want to override this, though
 	- this is true the first time you run make. After that, these values are remembered in the file `sys_config.env`.
 	- you can freely modify this file `sys_config.env`, though. It will be taken into account.
