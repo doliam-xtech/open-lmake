@@ -3,15 +3,15 @@
 **How to access them** (assume the user does NOT have the open-lmake sources on
 disk): everything below is rendered on the documentation site —
 
-- unit test `unit_tests/<name>.py` → `https://cesar-douady.github.io/open-lmake/unit_tests/<name>.html`
-- example `examples/<dir>/` → `https://cesar-douady.github.io/open-lmake/examples/<dir>/Lmakefile.html`
+- unit test `unit_tests/<name>.py` → `https://doliam-xtech.github.io/open-lmake/unit_tests/<name>.html`
+- example `examples/<dir>/` → `https://doliam-xtech.github.io/open-lmake/examples/<dir>/Lmakefile.html`
 
 Fetch those pages on demand rather than trusting memory.
 
-The source repo lives at https://github.com/cesar-douady/open-lmake — you can browse
+The source repo lives at https://github.com/doliam-xtech/open-lmake — you can browse
 individual files there, or clone it when you want to grep across the tree:
 
-    git clone https://github.com/cesar-douady/open-lmake.git
+    git clone https://github.com/doliam-xtech/open-lmake.git
 
 The default branch is fine; to match a specific installed version, `git checkout
 vXX.YY.Z` (e.g. `v26.02`-series tags). In a checkout the same relative paths apply —
@@ -64,7 +64,7 @@ Backends: `unit_tests/slurm_local.py` (readable slurm/local config),
 `check_deps` for perf) — niche but the best reference for "the dep graph itself is
 computed by rules".
 
-Documentation map (chapters at `https://cesar-douady.github.io/open-lmake/<name>.html`;
+Documentation map (chapters at `https://doliam-xtech.github.io/open-lmake/<name>.html`;
 sources under `doc/src/` in a checkout): `intro` (worked example, best mental
 model), `rules` (exhaustive attribute reference), `writing_lmakefile` (file
 structure, inheritance/combine), `execution` + `autodep` (read/write semantics,

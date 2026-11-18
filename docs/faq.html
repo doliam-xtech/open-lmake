@@ -152,7 +152,7 @@
 
                 <div id="content" class="content">
                     <main>
-                        <!-- This file is part of the open-lmake distribution (git@github.com:cesar-douady/open-lmake.git)-->
+                        <!-- This file is part of the open-lmake distribution (git@github.com:doliam-xtech/open-lmake.git)-->
 <!-- Copyright (c) 2023-2026 Doliam-->
 <!-- This program is free software: you can redistribute/modify under the terms of the GPL-v3 (https://www.gnu.org/licenses/gpl-3.0.html).-->
 <!-- This program is distributed WITHOUT ANY WARRANTY, without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.-->
@@ -193,8 +193,8 @@ and the up-hill check ("to build <code>a/b</code>, first ask whether <code>a</co
 the job creates <code>venv/bin</code> as a <em>dir</em>, a dir is "nothing", so <code>venv/bin</code> is not generated as a file, hence not buildable,
 and <code>venv/bin/pip</code> resolves through the same job.
 No first-level exclusion, no <code>AntiRule</code>
-(the <a href="https://cesar-douady.github.io/open-lmake/unit_tests/conan.html">conan</a> and
-<a href="https://cesar-douady.github.io/open-lmake/unit_tests/py_venv.html">py_venv</a> unit tests use exactly this shape).</p>
+(the <a href="https://doliam-xtech.github.io/open-lmake/unit_tests/conan.html">conan</a> and
+<a href="https://doliam-xtech.github.io/open-lmake/unit_tests/py_venv.html">py_venv</a> unit tests use exactly this shape).</p>
 <p>The trap is a <strong>symlink</strong> the job drops at an intermediate level — a venv creates <code>venv/lib64 -&gt; lib</code> on some distros.
 A symlink IS a file, so <code>venv/lib64</code> is buildable,
 and up-hill then makes any hand-spelled name through it (<code>venv/lib64/.../foo.py</code> as a static dep or on the <code>lmake</code> command line) non-buildable:
@@ -280,7 +280,7 @@ It is never erased, never checksummed, never tracked;
 <code>side_deps</code>/<code>side_targets</code> do not create deps or targets at all — they attach flags to whatever file accesses match their patterns.</p>
 <h2 id="nfs-and-locking-last-resort-territory"><a class="header" href="#nfs-and-locking-last-resort-territory">NFS and locking (last-resort territory)</a></h2>
 <h3 id="i-need-a-lock-around-a-stateful-tool-what-works-on-nfs"><a class="header" href="#i-need-a-lock-around-a-stateful-tool-what-works-on-nfs">I need a lock around a stateful tool; what works on NFS?</a></h3>
-<p>Restructure first (see <a href="https://cesar-douady.github.io/open-lmake/stateful_tools.html">stateful tools</a>).
+<p>Restructure first (see <a href="https://doliam-xtech.github.io/open-lmake/stateful_tools.html">stateful tools</a>).
 If a lock is truly needed: on NFS, <code>flock</code> and <code>mkdir</code>-based locks are <strong>not reliable</strong>;
 <code>open(O_CREAT|O_EXCL)</code>, <code>link</code> and <code>symlink</code> based locks work.
 Release with <code>trap release_lock 0</code> (fires on any exit, including under <code>set -e</code>) rather than a command suffix.

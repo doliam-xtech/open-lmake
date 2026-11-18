@@ -1,4 +1,4 @@
-<!-- This file is part of the open-lmake distribution (git@github.com:cesar-douady/open-lmake.git)-->
+<!-- This file is part of the open-lmake distribution (git@github.com:doliam-xtech/open-lmake.git)-->
 <!-- Copyright (c) 2023-2026 Doliam-->
 <!-- This program is free software: you can redistribute/modify under the terms of the GPL-v3 (https://www.gnu.org/licenses/gpl-3.0.html).-->
 <!-- This program is distributed WITHOUT ANY WARRANTY, without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.-->
@@ -6,7 +6,7 @@
 # AI assistants
 
 Open-lmake has a *skill* that teaches AI coding assistants how to write good Lmakefiles:
-the [skills/lmakefile](https://github.com/cesar-douady/open-lmake/tree/main/skills/lmakefile) directory of the repository.
+the [skills/lmakefile](https://github.com/doliam-xtech/open-lmake/tree/main/skills/lmakefile) directory of the repository.
 
 A skill is a directory of plain markdown files following the [Agent Skills](https://agentskills.io/) format:
 an entry point `SKILL.md` (small, ~2k tokens) that the agent loads whenever the task involves an Lmakefile,
@@ -21,7 +21,7 @@ The skill is written for humans as much as for agents.
 The open-lmake repository is also a Claude Code plugin marketplace, so installation is 2 commands:
 
 ```
-/plugin marketplace add cesar-douady/open-lmake
+/plugin marketplace add doliam-xtech/open-lmake
 /plugin install lmakefile@open-lmake
 ```
 

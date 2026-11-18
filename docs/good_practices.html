@@ -152,14 +152,14 @@
 
                 <div id="content" class="content">
                     <main>
-                        <!-- This file is part of the open-lmake distribution (git@github.com:cesar-douady/open-lmake.git)-->
+                        <!-- This file is part of the open-lmake distribution (git@github.com:doliam-xtech/open-lmake.git)-->
 <!-- Copyright (c) 2023-2026 Doliam-->
 <!-- This program is free software: you can redistribute/modify under the terms of the GPL-v3 (https://www.gnu.org/licenses/gpl-3.0.html).-->
 <!-- This program is distributed WITHOUT ANY WARRANTY, without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.-->
 <!-- This chapter is shared with the AI skill (cf. ai_assistants.md) : the content below is included from skills/lmakefile/references/ at book build time.-->
 <h1 id="good-practices"><a class="header" href="#good-practices">Good practices</a></h1>
 <p>open-lmake is not make/CMake/Bazel with a different syntax: it is a functional build system, and most reflexes learned from other build systems work against it
-(see <a href="https://cesar-douady.github.io/open-lmake/from_other_build_systems.html">coming from other build systems</a> for a reflex-by-reflex mapping).
+(see <a href="https://doliam-xtech.github.io/open-lmake/from_other_build_systems.html">coming from other build systems</a> for a reflex-by-reflex mapping).
 There are not many pitfalls to avoid here; there is mostly a habit to unlearn: working around pitfalls that do not exist.
 Simple things work very well; write the simple thing first.</p>
 <p>Design order: (1) what is my flow, (2) what depends on what, (3) how are my dirs and files organized, (4) how do I explain it to open-lmake — in that order.
@@ -187,7 +187,7 @@ A phony <code>all</code> does nothing after <code>rm -rf build</code> if no sour
 A tiny real target (a report, a checksum line) gives an honest done/steady status; <code>AliasRule</code> covers pure aliases.</li>
 <li><strong>Use <code>critical</code> on deps that are themselves lists of deps</strong> (e.g. a test-suite manifest):
 when the list changes, open-lmake stops speculatively rebuilding the old list and rebuilds the new one in parallel
-(cf. <a href="https://cesar-douady.github.io/open-lmake/critical_deps.html">critical deps</a>).
+(cf. <a href="https://doliam-xtech.github.io/open-lmake/critical_deps.html">critical deps</a>).
 Pair with <code>lmake.check_deps()</code> / <code>lcheck_deps</code> inside long jobs to fail fast on out-of-date deps.</li>
 <li><strong>Choose the right environ dict.</strong>
 <code>environ</code> is part of the command (change → rerun);
@@ -258,7 +258,7 @@ and you end up adding manual locks to serialize accesses open-lmake can no longe
 One <code>ignore</code> begets another.</p>
 <p><strong>Instead:</strong> declare the writes (<code>side_targets</code>, star targets), move scratch to <code>$TMPDIR</code>,
 or restructure so the tool's state lives inside the job's own target tree
-(see <a href="https://cesar-douady.github.io/open-lmake/stateful_tools.html">stateful tools</a>).
+(see <a href="https://doliam-xtech.github.io/open-lmake/stateful_tools.html">stateful tools</a>).
 Legitimate <code>ignore</code> uses are narrow and cosmetic (e.g. <code>.pyc</code> noise) — anything a rebuild could miss must stay tracked.</p>
 <h3 id="8-writes-outside-declared-targets"><a class="header" href="#8-writes-outside-declared-targets">8. Writes outside declared targets</a></h3>
 <p><strong>Reflex:</strong> scratch files next to sources, writing metadata into the source tree, uploading artifacts from inside a build rule — "it's just a temp file".</p>
@@ -282,7 +282,7 @@ open-lmake flags read+write of the same file as an error unless <code>incrementa
 and <code>incremental</code> is a promise (any prior state yields a correct result), not a waiver.</p>
 <p><strong>Instead:</strong> write a new file.
 If a tool insists on in-place state, isolate it per job or honor the <code>incremental</code> contract for real
-(see <a href="https://cesar-douady.github.io/open-lmake/stateful_tools.html">stateful tools</a>).</p>
+(see <a href="https://doliam-xtech.github.io/open-lmake/stateful_tools.html">stateful tools</a>).</p>
 <h3 id="11-second-build-system-embedded-blindly"><a class="header" href="#11-second-build-system-embedded-blindly">11. Second build system embedded blindly</a></h3>
 <p><strong>Reflex:</strong> call cmake/sbt/cargo/ninja inside one big rule and let it manage its own graph and cache.</p>
 <p><strong>Why it breaks (partially):</strong> it can be sound — autodep still tracks reads and writes —

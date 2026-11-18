@@ -182,12 +182,12 @@ also chapters of the official doc site — the book includes these very files, s
 skill and doc cannot diverge. Their cross-links use the site URLs; locally they
 resolve to the sibling files listed above.
 
-The authoritative documentation lives at https://cesar-douady.github.io/open-lmake/
+The authoritative documentation lives at https://doliam-xtech.github.io/open-lmake/
 (rendered book; key chapters: `rules.html`, `execution.html`, `autodep.html`,
 `critical_deps.html`, `cache.html`, `glossary.html`). The same site renders every
 unit test (`unit_tests/<name>.html`) and example (`examples/<dir>/Lmakefile.html`)
 — working, tested Lmakefiles, the best source of idioms. Assume the website is your
 only access: users generally do NOT have the open-lmake sources on disk. If a
-checkout happens to be available (github.com/cesar-douady/open-lmake), its
+checkout happens to be available (github.com/doliam-xtech/open-lmake), its
 `doc/src/*.md` and `unit_tests/*.py` match the installed version, which the website
 (tracking `main`) may not.

@@ -3,7 +3,7 @@
 Not a migration guide — a de-training table.
 Left column: the reflex you (or the codebase you are translating) bring along.
 Right column: what open-lmake actually wants.
-The numbered references point to the anti-pattern catalog in [good practices](https://cesar-douady.github.io/open-lmake/good_practices.html).
+The numbered references point to the anti-pattern catalog in [good practices](https://doliam-xtech.github.io/open-lmake/good_practices.html).
 
 | Your reflex | open-lmake idiom |
 |---|---|

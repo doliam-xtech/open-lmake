@@ -38,7 +38,7 @@ Prefer it whenever the dependency count is manageable.
 ## Level 1 — confine the tool's whole state inside the repo, one rule owns it
 
 Give the tool a home that is a target tree of exactly ONE rule.
-The [conan unit test](https://cesar-douady.github.io/open-lmake/unit_tests/conan.html) is instructive precisely because it splits the tree across two rules
+The [conan unit test](https://doliam-xtech.github.io/open-lmake/unit_tests/conan.html) is instructive precisely because it splits the tree across two rules
 and its driver asserts the resulting failure (`done=1, failed=1, rc=1`):
 
 ```python
@@ -82,7 +82,7 @@ That is the price of correctness, and the shared cache gives most of it back (th
 
 For tools with a valuable warm cache (incremental compilers), declare the tool's scratch tree as an `incremental` side/star target:
 it is not wiped between runs, the tool reuses it, and open-lmake still records everything.
-From the [cargo unit test](https://cesar-douady.github.io/open-lmake/unit_tests/cargo.html):
+From the [cargo unit test](https://doliam-xtech.github.io/open-lmake/unit_tests/cargo.html):
 
 ```python
 class CompileRust(HomelessRule,RustRule) :                   # excerpt; test-harness lines omitted
@@ -124,7 +124,7 @@ and leave a comment marking this as a known unsoundness with the intended exit
   unset `PYTHONPATH`/`VIRTUAL_ENV` inherited assumptions, pin the interpreter.
   A venv cannot inherit another venv's packages (interpreters chain via symlinks, site-packages do not) — one venv per tool, each installed by one rule.
   Spell canonical names in deps: a venv may create a `lib64 -> lib` symlink, and names spelled through it are non-buildable by the up-hill rule
-  (see the [FAQ](https://cesar-douady.github.io/open-lmake/faq.html)).
+  (see the [FAQ](https://doliam-xtech.github.io/open-lmake/faq.html)).
 - **conan (v2)**: internally sqlite-backed; a shared `CONAN_HOME` is level 3 with all its debt.
   Prefer level 0: resolve outside the build to a lockfile, then one rule per package materializing from the lock into tracked paths;
   or level 1 with a per-repo home built by a single rule chain (profiles → install → build), accepting the serialization through that chain.

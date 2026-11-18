@@ -1,4 +1,4 @@
-<!-- This file is part of the open-lmake distribution (git@github.com:cesar-douady/open-lmake.git)-->
+<!-- This file is part of the open-lmake distribution (git@github.com:doliam-xtech/open-lmake.git)-->
 <!-- Copyright (c) 2023-2026 Doliam-->
 <!-- This program is free software: you can redistribute/modify under the terms of the GPL-v3 (https://www.gnu.org/licenses/gpl-3.0.html).-->
 <!-- This program is distributed WITHOUT ANY WARRANTY, without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.-->
@@ -35,7 +35,7 @@ To understand why, visit [why sticking to alpha algorithms](doc/why_stick_to_alp
 
 If you are not sure you need open-lmake, visit [who needs open-lmake](doc/who_needs_open-lmake.md).
 
-The full documentation is [here](https://cesar-douady.github.io/open-lmake/).
+The full documentation is [here](https:/doliam-xtech.github.io/open-lmake/).
 
 # Installation
 
@@ -67,7 +67,7 @@ Once you have understood what is going on with `hello_world`, you can repeat the
 # AI assistants
 
 A skill teaching AI coding assistants to write good Lmakefiles can be found in [skills/lmakefile](skills/lmakefile).
-To install in Claude Code: `/plugin marketplace add cesar-douady/open-lmake` then `/plugin install lmakefile@open-lmake`.
+To install in Claude Code: `/plugin marketplace add doliam-xtech/open-lmake` then `/plugin install lmakefile@open-lmake`.
 For other tools (claude.ai, Codex, Cursor, ...), see [AI assistants](doc/src/ai_assistants.md).
 
 # Brief overview

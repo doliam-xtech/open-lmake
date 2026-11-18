@@ -152,7 +152,7 @@
 
                 <div id="content" class="content">
                     <main>
-                        <!-- This file is part of the open-lmake distribution (git@github.com:cesar-douady/open-lmake.git)-->
+                        <!-- This file is part of the open-lmake distribution (git@github.com:doliam-xtech/open-lmake.git)-->
 <!-- Copyright (c) 2023-2026 Doliam-->
 <!-- This program is free software: you can redistribute/modify under the terms of the GPL-v3 (https://www.gnu.org/licenses/gpl-3.0.html).-->
 <!-- This program is distributed WITHOUT ANY WARRANTY, without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.-->
@@ -161,7 +161,7 @@
 <p>Not a migration guide — a de-training table.
 Left column: the reflex you (or the codebase you are translating) bring along.
 Right column: what open-lmake actually wants.
-The numbered references point to the anti-pattern catalog in <a href="https://cesar-douady.github.io/open-lmake/good_practices.html">good practices</a>.</p>
+The numbered references point to the anti-pattern catalog in <a href="https://doliam-xtech.github.io/open-lmake/good_practices.html">good practices</a>.</p>
 <div class="table-wrapper"><table><thead><tr><th>Your reflex</th><th>open-lmake idiom</th></tr></thead><tbody>
 <tr><td>List every dependency of a target by hand (<code>foo.o: foo.c foo.h bar.h</code>)</td><td>List only <em>static</em> deps (what is needed to select the rule, typically the primary input). Headers, includes, imports are discovered by autodep at run time.</td></tr>
 <tr><td>Generate dep files (<code>gcc -MMD</code> + <code>-include *.d</code>) and wire them back in</td><td><code>lmake.run_cc()</code> if you want compiler-precise reporting, but plain autodep already catches includes. No dep-file plumbing.</td></tr>

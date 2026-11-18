@@ -2,7 +2,7 @@
 
 Distilled from the open-lmake doc chapters `rules`, `lmake_rules_module` and
 `lmake_module` — for full semantics see
-https://cesar-douady.github.io/open-lmake/rules.html (and siblings); if a source
+https://doliam-xtech.github.io/open-lmake/rules.html (and siblings); if a source
 checkout is available, the same chapters live in `doc/src/`, and `lib/lmake/rules.py`
 is the authoritative definition of the base classes below — short, exhaustive and
 commented for exactly this purpose (also installed with open-lmake, importable as

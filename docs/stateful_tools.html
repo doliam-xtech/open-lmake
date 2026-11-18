@@ -152,7 +152,7 @@
 
                 <div id="content" class="content">
                     <main>
-                        <!-- This file is part of the open-lmake distribution (git@github.com:cesar-douady/open-lmake.git)-->
+                        <!-- This file is part of the open-lmake distribution (git@github.com:doliam-xtech/open-lmake.git)-->
 <!-- Copyright (c) 2023-2026 Doliam-->
 <!-- This program is free software: you can redistribute/modify under the terms of the GPL-v3 (https://www.gnu.org/licenses/gpl-3.0.html).-->
 <!-- This program is distributed WITHOUT ANY WARRANTY, without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.-->
@@ -188,7 +188,7 @@ This is the only level with full cache soundness and zero caveats.
 Prefer it whenever the dependency count is manageable.</p>
 <h2 id="level-1--confine-the-tools-whole-state-inside-the-repo-one-rule-owns-it"><a class="header" href="#level-1--confine-the-tools-whole-state-inside-the-repo-one-rule-owns-it">Level 1 — confine the tool's whole state inside the repo, one rule owns it</a></h2>
 <p>Give the tool a home that is a target tree of exactly ONE rule.
-The <a href="https://cesar-douady.github.io/open-lmake/unit_tests/conan.html">conan unit test</a> is instructive precisely because it splits the tree across two rules
+The <a href="https://doliam-xtech.github.io/open-lmake/unit_tests/conan.html">conan unit test</a> is instructive precisely because it splits the tree across two rules
 and its driver asserts the resulting failure (<code>done=1, failed=1, rc=1</code>):</p>
 <pre><code class="language-python">class Pip(Rule) :                          # succeeds: owns the whole tree
     targets    = { 'PIP' : 'venv/bin/pip' , 'VENV' : r'venv/{*:.*}' }
@@ -224,7 +224,7 @@ That is the price of correctness, and the shared cache gives most of it back (th
 <h2 id="level-2--declared-incremental-scratch-the-cargo-pattern"><a class="header" href="#level-2--declared-incremental-scratch-the-cargo-pattern">Level 2 — declared incremental scratch (the cargo pattern)</a></h2>
 <p>For tools with a valuable warm cache (incremental compilers), declare the tool's scratch tree as an <code>incremental</code> side/star target:
 it is not wiped between runs, the tool reuses it, and open-lmake still records everything.
-From the <a href="https://cesar-douady.github.io/open-lmake/unit_tests/cargo.html">cargo unit test</a>:</p>
+From the <a href="https://doliam-xtech.github.io/open-lmake/unit_tests/cargo.html">cargo unit test</a>:</p>
 <pre><code class="language-python">class CompileRust(HomelessRule,RustRule) :                   # excerpt; test-harness lines omitted
     targets      = { 'EXE'        :   r'{Dir:.+/|}{Module:[^/]+}/target/debug/{Module}'  }
     side_targets = { 'SCRATCHPAD' : ( r'{Dir}{Module}/{*:.*}' , 'Incremental' )          }
@@ -261,7 +261,7 @@ Disable the pip cache (<code>PIP_NO_CACHE_DIR=1</code>, or point <code>PIP_CACHE
 unset <code>PYTHONPATH</code>/<code>VIRTUAL_ENV</code> inherited assumptions, pin the interpreter.
 A venv cannot inherit another venv's packages (interpreters chain via symlinks, site-packages do not) — one venv per tool, each installed by one rule.
 Spell canonical names in deps: a venv may create a <code>lib64 -&gt; lib</code> symlink, and names spelled through it are non-buildable by the up-hill rule
-(see the <a href="https://cesar-douady.github.io/open-lmake/faq.html">FAQ</a>).</li>
+(see the <a href="https://doliam-xtech.github.io/open-lmake/faq.html">FAQ</a>).</li>
 <li><strong>conan (v2)</strong>: internally sqlite-backed; a shared <code>CONAN_HOME</code> is level 3 with all its debt.
 Prefer level 0: resolve outside the build to a lockfile, then one rule per package materializing from the lock into tracked paths;
 or level 1 with a per-repo home built by a single rule chain (profiles → install → build), accepting the serialization through that chain.</li>

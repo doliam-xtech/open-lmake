@@ -46,8 +46,8 @@ and the up-hill check ("to build `a/b`, first ask whether `a` is buildable") doe
 the job creates `venv/bin` as a *dir*, a dir is "nothing", so `venv/bin` is not generated as a file, hence not buildable,
 and `venv/bin/pip` resolves through the same job.
 No first-level exclusion, no `AntiRule`
-(the [conan](https://cesar-douady.github.io/open-lmake/unit_tests/conan.html) and
-[py_venv](https://cesar-douady.github.io/open-lmake/unit_tests/py_venv.html) unit tests use exactly this shape).
+(the [conan](https://doliam-xtech.github.io/open-lmake/unit_tests/conan.html) and
+[py_venv](https://doliam-xtech.github.io/open-lmake/unit_tests/py_venv.html) unit tests use exactly this shape).
 
 The trap is a **symlink** the job drops at an intermediate level — a venv creates `venv/lib64 -> lib` on some distros.
 A symlink IS a file, so `venv/lib64` is buildable,
@@ -171,7 +171,7 @@ It is never erased, never checksummed, never tracked;
 
 ### I need a lock around a stateful tool; what works on NFS?
 
-Restructure first (see [stateful tools](https://cesar-douady.github.io/open-lmake/stateful_tools.html)).
+Restructure first (see [stateful tools](https://doliam-xtech.github.io/open-lmake/stateful_tools.html)).
 If a lock is truly needed: on NFS, `flock` and `mkdir`-based locks are **not reliable**;
 `open(O_CREAT|O_EXCL)`, `link` and `symlink` based locks work.
 Release with `trap release_lock 0` (fires on any exit, including under `set -e`) rather than a command suffix.

@@ -1,7 +1,7 @@
 # Good practices
 
 open-lmake is not make/CMake/Bazel with a different syntax: it is a functional build system, and most reflexes learned from other build systems work against it
-(see [coming from other build systems](https://cesar-douady.github.io/open-lmake/from_other_build_systems.html) for a reflex-by-reflex mapping).
+(see [coming from other build systems](https://doliam-xtech.github.io/open-lmake/from_other_build_systems.html) for a reflex-by-reflex mapping).
 There are not many pitfalls to avoid here; there is mostly a habit to unlearn: working around pitfalls that do not exist.
 Simple things work very well; write the simple thing first.
 
@@ -32,7 +32,7 @@ when debugging a build that behaves differently between users or machines, look 
   A tiny real target (a report, a checksum line) gives an honest done/steady status; `AliasRule` covers pure aliases.
 - **Use `critical` on deps that are themselves lists of deps** (e.g. a test-suite manifest):
   when the list changes, open-lmake stops speculatively rebuilding the old list and rebuilds the new one in parallel
-  (cf. [critical deps](https://cesar-douady.github.io/open-lmake/critical_deps.html)).
+  (cf. [critical deps](https://doliam-xtech.github.io/open-lmake/critical_deps.html)).
   Pair with `lmake.check_deps()` / `lcheck_deps` inside long jobs to fail fast on out-of-date deps.
 - **Choose the right environ dict.**
   `environ` is part of the command (change → rerun);
@@ -133,7 +133,7 @@ One `ignore` begets another.
 
 **Instead:** declare the writes (`side_targets`, star targets), move scratch to `$TMPDIR`,
 or restructure so the tool's state lives inside the job's own target tree
-(see [stateful tools](https://cesar-douady.github.io/open-lmake/stateful_tools.html)).
+(see [stateful tools](https://doliam-xtech.github.io/open-lmake/stateful_tools.html)).
 Legitimate `ignore` uses are narrow and cosmetic (e.g. `.pyc` noise) — anything a rebuild could miss must stay tracked.
 
 ### 8. Writes outside declared targets
@@ -169,7 +169,7 @@ and `incremental` is a promise (any prior state yields a correct result), not a 
 
 **Instead:** write a new file.
 If a tool insists on in-place state, isolate it per job or honor the `incremental` contract for real
-(see [stateful tools](https://cesar-douady.github.io/open-lmake/stateful_tools.html)).
+(see [stateful tools](https://doliam-xtech.github.io/open-lmake/stateful_tools.html)).
 
 ### 11. Second build system embedded blindly
 

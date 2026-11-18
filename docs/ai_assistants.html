@@ -152,13 +152,13 @@
 
                 <div id="content" class="content">
                     <main>
-                        <!-- This file is part of the open-lmake distribution (git@github.com:cesar-douady/open-lmake.git)-->
+                        <!-- This file is part of the open-lmake distribution (git@github.com:doliam-xtech/open-lmake.git)-->
 <!-- Copyright (c) 2023-2026 Doliam-->
 <!-- This program is free software: you can redistribute/modify under the terms of the GPL-v3 (https://www.gnu.org/licenses/gpl-3.0.html).-->
 <!-- This program is distributed WITHOUT ANY WARRANTY, without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.-->
 <h1 id="ai-assistants"><a class="header" href="#ai-assistants">AI assistants</a></h1>
 <p>Open-lmake has a <em>skill</em> that teaches AI coding assistants how to write good Lmakefiles:
-the <a href="https://github.com/cesar-douady/open-lmake/tree/main/skills/lmakefile">skills/lmakefile</a> directory of the repository.</p>
+the <a href="https://github.com/doliam-xtech/open-lmake/tree/main/skills/lmakefile">skills/lmakefile</a> directory of the repository.</p>
 <p>A skill is a directory of plain markdown files following the <a href="https://agentskills.io/">Agent Skills</a> format:
 an entry point <code>SKILL.md</code> (small, ~2k tokens) that the agent loads whenever the task involves an Lmakefile,
 plus reference files under <code>references/</code> that it loads on demand.
@@ -167,7 +167,7 @@ integrating stateful tools (conan, pip, cargo, ...) and how to verify a flow wit
 <p>The skill is written for humans as much as for agents.</p>
 <h2 id="claude-code"><a class="header" href="#claude-code">Claude Code</a></h2>
 <p>The open-lmake repository is also a Claude Code plugin marketplace, so installation is 2 commands:</p>
-<pre><code>/plugin marketplace add cesar-douady/open-lmake
+<pre><code>/plugin marketplace add doliam-xtech/open-lmake
 /plugin install lmakefile@open-lmake
 </code></pre>
 <p>Alternatively, skip the plugin system and copy (or symlink) the skill directory:</p>
