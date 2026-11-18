@@ -35,7 +35,7 @@ To understand why, visit [why sticking to alpha algorithms](doc/why_stick_to_alp
 
 If you are not sure you need open-lmake, visit [who needs open-lmake](doc/who_needs_open-lmake.md).
 
-The full documentation is [here](https://cesar-douady.github.io/open-lmake/).
+The full documentation is [here](https://doliam-xtech.github.io/open-lmake/).
 
 # Installation
 
