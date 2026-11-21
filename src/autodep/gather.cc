@@ -886,42 +886,47 @@ Status Gather::_exec_child() {
 					break ;
 				#endif
 				case Kind::ChildEnd   :
-				case Kind::ChildEndFd : {
-					if (kind!=Kind::ChildEndFd)   wstatus = _child.wait() ;
-					else                        { int cnt=::read(fd,&::ref(char()),1) ; SWEAR(cnt==1,cnt) ; _child.waited() ; } // wstatus is already set, _child was waited for, just flush fd
+					{	int ws = _child.wait(true/*no_hang*/) ;
+						if (+_child) break ;                                                // child is not dead, it was stopped or continued, ignore
+						wstatus = ws ;
+					}
+					epoll.del_pid(_child.pid) ;
 					#if HAS_EBPF
 						if (+_ebpf_tracer) {
 							bool done = true ;
 							try                       { done = _ebpf_tracer.consume() ; }
 							catch (::string const& e) { panic( New , e ) ;              }
-							if (!done) panic( New , "ebpf queue overflow" ) ;             // ebpf reporting should be complete (after having been flushed) once child is ended
+							if (!done) panic( New , "ebpf queue overflow" ) ;               // ebpf reporting should be complete (after having been flushed) once child is ended
 							epoll.del( false/*write*/ , _ebpf_tracer.epoll_fd() ) ;
 						}
 					#endif
-					int ws = wstatus ;
-					trace(kind,fd,_child.pid,ws) ;
-					SWEAR_PROD( !WIFSTOPPED(ws) , kind,ws,_child.pid ) ;                  // child must have ended if we are here
+					goto ChildEnd ;
+				case Kind::ChildEndFd :
+					{ int cnt=::read(fd,&::ref(char()),1) ; SWEAR(cnt==1,cnt) ; }           // flush fd
+					_child.waited() ;                                                       // wstatus is already set, _child was waited for
+					epoll.del(false/*write*/,fd) ;
+				ChildEnd :
+					trace(kind,fd,_child.pid,wstatus) ;
+					SWEAR_PROD( !WIFSTOPPED(wstatus) , kind,wstatus,_child.pid ) ;          // child must have ended if we are here
 					//
 					end_date   = New                                 ;
 					_wait     &= ~Kind::ChildEnd                     ;
-					end_child  = end_date + network_delay + Delay(1) ;                    // wait at most network_delay (+ 1s for our own processing) for reporting & stdout & stderr to settle down
-					_user_trace( end_date , Comment::EndJob , to_hex(uint16_t(ws)) ) ;
+					end_child  = end_date + network_delay + Delay(1) ;                      // wait at most network_delay (+ 1s for our own processing) for reporting & stdout & stderr to settle down
+					_user_trace( end_date , Comment::EndJob , to_hex(uint16_t(wstatus)) ) ;
 					//
-					if (WIFEXITED(ws)) {
-						set_status( WEXITSTATUS(ws)!=0 ? Status::JobError : Status::Ok ) ;
-					} else if (WIFSIGNALED(ws) ) {
-						int sig=WTERMSIG(ws) ;
+					if (WIFEXITED(wstatus)) {
+						set_status( WEXITSTATUS(wstatus)!=0 ? Status::JobError : Status::Ok ) ;
+					} else if (WIFSIGNALED(wstatus) ) {
+						int sig=WTERMSIG(wstatus) ;
 						if (is_sig_sync(sig)) set_status( Status::JobError                                                                ) ; // synchronous signals are actually errors
 						else                  set_status( Status::LateLost , cat("job killed with signal ",sig," (",::strsignal(sig),')') ) ;
 					} else {
-						FAIL_PROD("unexpected wstatus : ",ws) ;                    // NO_COV defensive programming
+						FAIL_PROD("unexpected wstatus : ",wstatus) ;        // NO_COV defensive programming
 					}
-					if (kind!=Kind::ChildEndFd) epoll.del_pid(_child.pid       ) ;
-					else                        epoll.del    (false/*write*/,fd) ;
-					/**/                   epoll.dec() ;                           // dont wait for new connections from job (but process those that come)
-					if (+server_master_fd) epoll.dec() ;                           // idem for connections from server
+					/**/                   epoll.dec() ;                    // dont wait for new connections from job (but process those that come)
+					if (+server_master_fd) epoll.dec() ;                    // idem for connections from server
 					trace(kind,fd,"close",status,"wait",_wait,+epoll) ;
-				} break ;
+				break ;
 				case Kind::JobMaster : {
 					SWEAR( fd==job_master_fd , fd,job_master_fd ) ;
 					Fd sfd = job_master_fd.accept().detach() ;
@@ -933,7 +938,7 @@ Status Gather::_exec_child() {
 					SWEAR( fd==server_master_fd , fd,server_master_fd ) ;
 					Fd sfd = server_master_fd.accept().detach() ;
 					epoll.add_read(sfd,Kind::ServerSlave) ;
-					server_slaves[sfd] = {.key=server_master_fd.key} ;             // allocate entry
+					server_slaves[sfd] = {.key=server_master_fd.key} ;      // allocate entry
 					trace(kind,fd,"server_slave",sfd,"wait",_wait,+epoll) ;
 				} break ;
 				case Kind::ServerSlave : {

@@ -62,11 +62,13 @@ struct Child {
 	void waited() {
 		pid = 0 ;
 	}
-	int/*wstatus*/ wait() {
+	int/*wstatus*/ wait(bool no_hang=false) {
 		SWEAR(pid!=0) ;
-		int wstatus ;
-		int rc      = ::waitpid(pid,&wstatus,0/*options*/) ; swear_prod(rc==pid,"cannot wait for pid",pid) ;
-		waited() ;
+		int wstatus = 0                                                                    ;
+		int rc      = ::waitpid( pid , &wstatus , no_hang?WNOHANG|WUNTRACED|WCONTINUED:0 ) ; swear_prod( rc>=0 , "cannot wait (",StrErr(),") for pid ",pid ) ;
+		//
+		if ( rc && !WIFSTOPPED(wstatus) && !WIFCONTINUED(wstatus) ) waited() ;
+		//
 		return wstatus ;
 	}
 	bool         wait_ok (       )       { return wstatus_ok(wait())                           ; }

@@ -22,7 +22,7 @@
 // No lock is necessary :
 // - the state of a syscall in progress is held in a task storage, only accessed by the task itself, so there is no concurrency (and this is robust to preemption)
 // - events are built in this storage and copied to the ring buffer, which is multi-producer
-// - job wide counters are atomically updated
+// - the overflow bit needs no atomic operations, it is only set and read independently, so volatile is enough
 
 // stupid conventions need a transcription from uname -m (here in the form of TARGET_ARCH_xxx) to __TARGET_ARCH_xxx defines understood by bpf/bpf_tracing.h
 #if defined(TARGET_ARCH_x86_64)
@@ -172,9 +172,7 @@ struct {
 // utils
 //
 
-static __always_inline int32_t _atomic_ld ( int32_t* p             ) { return __atomic_fetch_sub ( p , 0 , __ATOMIC_RELAXED ) ; } // XXX/ : __atomic_load_n  is broken in clang
-static __always_inline void    _atomic_st ( int32_t* p , int32_t v ) {        __atomic_exchange_n( p , v , __ATOMIC_RELAXED ) ; } // XXX/ : __atomic_store_n is broken in clang
-static __always_inline void    _atomic_sub( int32_t* p , int32_t v ) {        __atomic_fetch_sub ( p , v , __ATOMIC_RELAXED ) ; }
+#define HAS_FIELD(s,f) bpf_core_field_exists(((struct s*)0)->f)
 
 static __always_inline bool _is_ok(long ret) {
 	return (unsigned long)ret<=(unsigned long)-4096 ; // negative values -4095 to -1 are error codes
@@ -360,45 +358,37 @@ static __always_inline void _reset_ev(Task* tv) {
 }
 
 // push tv->ev to the ring buffer of its job, if the job is gone, the event is dropped
-static __noinline bool/*ok*/ _emit( struct task_struct* t , Task* tv ) { //!                       ok
-	/**/                                                        if ( tv->is_tracer             ) return false ; // defensive
-	uint32_t   jid = tv->job_id                               ; if ( !jid || jid>=N_JOBS       ) return false ; // 32-bits to access ring_bufs
+static __noinline bool/*ok*/ _emit( struct task_struct* t , Task* tv ) { //!                 ok
+	/**/                                                        if ( tv->is_tracer       ) return false ; // defensive
+	uint32_t   jid = tv->job_id                               ; if ( !jid || jid>=N_JOBS ) return false ; // 32-bits to access ring_bufs
 	JobInfo*   ji  = job_infos + jid                          ;
-	/**/                                                        if ( _atomic_ld(&ji->overflow) ) return false ;
-	void     * rb  = bpf_map_lookup_elem( &ring_bufs , &jid ) ; if ( !rb                       ) return false ;
+	/**/                                                        if ( ji->overflow        ) return false ;
+	void     * rb  = bpf_map_lookup_elem( &ring_bufs , &jid ) ; if ( !rb                 ) return false ;
 	EbpfEvent* ev  = &tv->ev                                  ;
 	uint32_t   sz  = sizeof(EbpfEventHdr)                     ;
 	bool       ok  = true                                     ;
 	//
-	if ( !ev->hdr.kind                                                      ) return 0  ;                       // defensive
-	if ( ev->hdr.kind==EBPF_NOP                                             ) goto Done ;                       // NONE is nothing, NOP is a syscall that does nothing (not the same reset)
+	if ( !ev->hdr.kind                                                      ) return 0  ;                 // defensive
+	if ( ev->hdr.kind==EBPF_NOP                                             ) goto Done ;                 // NONE is nothing, NOP is a syscall that does nothing (not the same reset)
 	if ( ev->hdr.kind>=EBPF_HAS_DATA && ev->hdr.root_id<EBPF_ROOT_ID_REPORT ) goto Done ;
 	//
-	if (!( ev->hdr.flags & EBPF_F_STOPPED )) {                                                                  // force stop if ring buf has not enough room
-		int32_t room = _atomic_ld(&ji->room) ;
-		if (room<RING_BUF_MARGIN) {
-			int room2 = RING_BUF_SZ - (int32_t)bpf_ringbuf_query( rb , BPF_RB_AVAIL_DATA ) ;
-			_atomic_st( &ji->room , room2 ) ;
-			room = RING_BUF_SZ - (int32_t)bpf_ringbuf_query( rb , BPF_RB_AVAIL_DATA ) ;                         // ensure we do not leave an optimistic room
-			if (room<room2) _atomic_sub( &ji->room , room2-room ) ;                                             // cancel optimism
-		}
+	if (ev->hdr.kind>=EBPF_HAS_DATA) {
+		sz += tv->file_len ;
+		if (sz>=sizeof(EbpfEvent)) return false ;                                                         // please verifier
+		if (HAS_STAMPS           ) ev->hdr.stamp_ns = bpf_ktime_get_tai_ns() ;
+	}
+	if (!( ev->hdr.flags & EBPF_F_STOPPED )) {                                                            // force stop if ring buf has not enough room
+		int room = RING_BUF_SZ - (int32_t)bpf_ringbuf_query( rb , BPF_RB_AVAIL_DATA ) ;
 		if (room<RING_BUF_MARGIN) ev->hdr.flags |= EBPF_F_STOPPED ;
 	}
 	if ( ev->hdr.flags & EBPF_F_STOPPED ) {
-		if ( BPF_CORE_READ(t,flags) & IO_WORKER ) ev->hdr.flags &= ~EBPF_F_STOPPED ;                            // io_uring worker threads cannot be stopped
+		if ( BPF_CORE_READ(t,flags) & IO_WORKER ) ev->hdr.flags &= ~EBPF_F_STOPPED ;                      // io_uring worker threads cannot be stopped
 		else                                      bpf_send_signal_thread(SIGSTOP) ;
 	}
-	if (ev->hdr.kind>=EBPF_HAS_DATA) {
-		sz += tv->file_len ;
-		if (sz>=sizeof(EbpfEvent)) return false ;                                                               // please verifier
-		if (HAS_STAMPS           ) ev->hdr.stamp_ns = bpf_ktime_get_tai_ns() ;
-	}
 	ok = bpf_ringbuf_output( rb , ev , sz , 0/*flags*/ )==0 ;
-	if (ok) {
-		_atomic_sub( &ji->room , (int32_t)sz ) ;
-	} else {
-		if ( ev->hdr.flags & EBPF_F_STOPPED ) bpf_send_signal_thread(SIGCONT) ;                                 // restart thread as userland has not been told to do so
-		_atomic_st( &ji->overflow , true ) ;                                                                    // dont emit any further, in particular dont emit job end
+	if (!ok) {
+		if ( ev->hdr.flags & EBPF_F_STOPPED ) bpf_send_signal_thread(SIGCONT) ;                           // restart thread as userland has not been told to do so
+		ji->overflow = true ;                                                                             // dont emit any further, in particular dont emit job end
 	}
 Done :
 	_reset_ev(tv) ;
@@ -436,8 +426,7 @@ int on_sys_enter_symlinkat(struct trace_event_raw_sys_enter* ctx) {
 		tv->job_id     = jid                            ;
 		tv->is_tracer  = true                           ;                                                                                       // jobs are registered by tracer
 		tv->ev.hdr.key = (uint32_t)BPF_CORE_READ(t,pid) ;                                                                                       // pid field is actually the tid
-		_atomic_st( &ji->overflow , false       )       ;
-		_atomic_st( &ji->room     , RING_BUF_SZ )       ;                                                                                       // when job registers, no events have been posted yet
+		ji->overflow   = false                          ;
 		return 0 ;
 	}
 	Task* tv = bpf_task_storage_get( &tasks , t , 0/*value*/ , 0/*flags*/ ) ; if (!tv) return 0 ; // note : do not consider disabled to manipulate disabled
@@ -526,7 +515,7 @@ int BPF_PROG( on_exit , struct task_struct* t ) {
 	_emit( t , tv ) ;
 	if (tv->is_job) {
 		uint32_t jid = tv->job_id ; if ( !jid || jid>=N_JOBS ) return 0 ; // XXX/ : clang seems to bug with 16-bits indexes
-		_atomic_st( &job_infos[jid].overflow , true ) ;                   // ensure no further messages
+		job_infos[jid].overflow = true ;                                  // defensive : ensure no further messages
 	}
 	return 0 ;
 }
@@ -592,12 +581,10 @@ static __always_inline void _fill_ev_inode( EbpfEvent* ev , struct dentry* dentr
 	else if ((mode&S_IFMT)==S_IFLNK) ev->hdr.file_kind = EBPF_FILE_LNK                                ;
 	else                             ev->hdr.file_kind = EBPF_FILE_NO_FILE                            ;
 	ev->hdr.size = BPF_CORE_READ( inode , i_size ) ;
-	#define HAS_FIELD(s,f)        bpf_core_field_exists(((struct s*)0)->f)
 	#define MTIME_NS(in,sec,nsec) (uint64_t)BPF_CORE_READ(in,sec)*1000000000 + BPF_CORE_READ(in,nsec)
 	if      (HAS_FIELD(inode___v611,i_mtime_sec     )) ev->hdr.mtime_ns = MTIME_NS( (struct inode___v611*)inode , i_mtime_sec      , i_mtime_nsec      ) ;
 	else if (HAS_FIELD(inode___v66 ,__i_mtime.tv_sec)) ev->hdr.mtime_ns = MTIME_NS( (struct inode___v66 *)inode , __i_mtime.tv_sec , __i_mtime.tv_nsec ) ;
 	else if (HAS_FIELD(inode___old ,i_mtime.tv_sec  )) ev->hdr.mtime_ns = MTIME_NS( (struct inode___old *)inode , i_mtime.tv_sec   , i_mtime.tv_nsec   ) ;
-	#undef HAS_FIELD
 	#undef MTIME_NS
 }
 
@@ -991,30 +978,52 @@ int handle_submit_req() {
 	return 0 ;
 }
 
-#define _HANDLEAT_IO1( io_name , io_typ , kind_expr , flags_expr , dfd_expr,file_field , no_follow_expr , active_expr ) \
-	SEC( "fexit/"#io_name )                                                                           \
-	int BPF_PROG( on_##io_name , struct io_kiocb* req_ , uint flags , int ret ) {                     \
-		struct task_struct* t      = bpf_get_current_task_btf()             ;                         \
-		Task              * tv     = _capturing_io(t,ret)                   ; if (!tv    ) return 0 ; \
-		EbpfEvent         * ev     = &tv->ev                                ;                         \
-		struct io_typ     * req    = (struct io_typ*)(req_+0)               ;                         \
-		bool                active = active_expr                            ; if (!active) return 0 ; \
-		int                 dfd    = dfd_expr                               ;                         \
-		const char*         path   = BPF_CORE_READ( req , file_field,name ) ;                         \
-		/**/                                                                                          \
-		/**/                ev->hdr.kind   = kind_expr        ;                                       \
-		/**/                ev->hdr.flags |= flags_expr       ;                                       \
-		if (no_follow_expr) ev->hdr.flags |= EBPF_F_NO_FOLLOW ;                                       \
-		if (_is_ok(ret)   ) ev->hdr.flags |= EBPF_F_OK        ;                                       \
-		_emit_user( t , tv , dfd,path , true/*kernel*/ , ret ) ;                                      \
-		return 0 ;                                                                                    \
-	}
-#define HANDLEAT_IO1( io_name , io_typ , kind_expr , flags_expr , dfd_field,file_field , no_follow_expr , active_expr ) \
-	_HANDLEAT_IO1( io_name , io_typ , kind_expr ,flags_expr , BPF_CORE_READ(req,dfd_field),file_field , no_follow_expr , active_expr )
-#define HANDLE_IO1( io_name , io_typ , kind_expr , flags_expr , file_field , no_follow_expr , active_expr ) \
-	_HANDLEAT_IO1( io_name , io_typ , kind_expr ,flags_expr , AT_FDCWD,file_field , no_follow_expr , active_expr )
+struct delayed_filename___v {
+	struct filename* __incomplete_filename ;
+} __attribute__((preserve_access_index)) ;
 
-#define HANDLE_IO2( io_name , io_typ , is_rename ) \
+#define MK_ACCESS( io_typ , sfx , field ) \
+struct io_typ##___old##sfx { struct filename*            field ; } __attribute__((preserve_access_index)) ;                                                              \
+struct io_typ##___new##sfx { struct delayed_filename___v field ; } __attribute__((preserve_access_index)) ;                                                              \
+static __always_inline const char* io_get_path_##io_typ##sfx(struct io_typ* req) {                                                                                       \
+	if      (HAS_FIELD(io_typ##___new##sfx,field.__incomplete_filename)) return BPF_CORE_READ( (struct io_typ##___new##sfx*)req , field.__incomplete_filename , name ) ; \
+	else if (HAS_FIELD(io_typ##___old##sfx,field                      )) return BPF_CORE_READ( (struct io_typ##___old##sfx*)req , field                       , name ) ; \
+	else                                                            return 0                                                                                           ; \
+}
+
+MK_ACCESS( io_mkdir  ,      , filename )
+MK_ACCESS( io_statx  ,      , filename )
+MK_ACCESS( io_link   ,      , newpath  )
+MK_ACCESS( io_unlink ,      , filename )
+MK_ACCESS( io_xattr  ,      , filename )
+//
+MK_ACCESS( io_link   , _old , oldpath  )
+MK_ACCESS( io_link   , _new , newpath  )
+MK_ACCESS( io_rename , _old , oldpath  )
+MK_ACCESS( io_rename , _new , newpath  )
+
+#define _IO_DO1( io_name , io_typ , kind_expr , flags_expr , dfd_expr , no_follow_expr , active_expr ) \
+	SEC( "fexit/"#io_name )                                                               \
+	int BPF_PROG( on_##io_name , struct io_kiocb* req_ , uint flags , int ret ) {         \
+		struct task_struct* t      = bpf_get_current_task_btf() ;                         \
+		Task              * tv     = _capturing_io(t,ret)       ; if (!tv    ) return 0 ; \
+		EbpfEvent         * ev     = &tv->ev                    ;                         \
+		struct io_typ     * req    = (struct io_typ*)(req_+0)   ;                         \
+		bool                active = active_expr                ; if (!active) return 0 ; \
+		int                 dfd    = dfd_expr                   ;                         \
+		const char*         path   = io_get_path_##io_typ(req)  ;                         \
+		/**/                                                                              \
+		/**/                ev->hdr.kind   = kind_expr        ;                           \
+		/**/                ev->hdr.flags |= flags_expr       ;                           \
+		if (no_follow_expr) ev->hdr.flags |= EBPF_F_NO_FOLLOW ;                           \
+		if (_is_ok(ret)   ) ev->hdr.flags |= EBPF_F_OK        ;                           \
+		_emit_user( t , tv , dfd,path , true/*kernel*/ , ret ) ;                          \
+		return 0 ;                                                                        \
+	}
+#define IO_DO_AT1(io_name,io_typ,kind_expr,flags_expr,dfd_field,no_follow_expr,active_expr) _IO_DO1(io_name,io_typ,kind_expr,flags_expr,BPF_CORE_READ(req,dfd_field),no_follow_expr,active_expr)
+#define IO_DO1(   io_name,io_typ,kind_expr,flags_expr,          no_follow_expr,active_expr) _IO_DO1(io_name,io_typ,kind_expr,flags_expr,AT_FDCWD                    ,no_follow_expr,active_expr)
+
+#define IO_DO2( io_name , io_typ , is_rename ) \
 	SEC( "fexit/"#io_name )                                                        \
 	int BPF_PROG( on_##io_name , struct io_kiocb* req_ , uint flags , int ret ) {  \
 		struct task_struct* t   = bpf_get_current_task_btf() ;                     \
@@ -1023,8 +1032,8 @@ int handle_submit_req() {
 		_process_2_files(                                                          \
 			t , tv                                                                 \
 		,	is_rename                                                              \
-		,	BPF_CORE_READ(req,old_dfd) , BPF_CORE_READ(req,oldpath,name)           \
-		,	BPF_CORE_READ(req,new_dfd) , BPF_CORE_READ(req,newpath,name)           \
+		,	BPF_CORE_READ(req,old_dfd) , io_get_path_##io_typ##_old(req)           \
+		,	BPF_CORE_READ(req,new_dfd) , io_get_path_##io_typ##_new(req)           \
 		,	true/*kernel*/                                                         \
 		,	flags                                                                  \
 		,	ret                                                                    \
@@ -1032,17 +1041,19 @@ int handle_submit_req() {
 		return 0 ;                                                                 \
 	}
 
-// XXX : manage conditional presence of faccessat
-//              io_name         io_typ         kind_expr     flags_expr      dfd_field file_field no_follow_expr                                 active_expr
-//HANDLEAT_IO1( io_faccessat  , io_faccessat , EBPF_READ   , EBPF_F_DEP_ALL  , dfd    ,filename , false                                        , _access_is_read(BPF_CORE_READ(req,mod )) )
-//HANDLEAT_IO1( io_faccessat2 , io_faccessat , EBPF_READ   , EBPF_F_DEP_ALL  , dfd    ,filename , BPF_CORE_READ(req,flags)&AT_SYMLINK_NOFOLLOW , _access_is_read(BPF_CORE_READ(req,mod )) )
-HANDLEAT_IO1  ( io_mkdirat    , io_mkdir     , EBPF_NOP    , 0               , dfd    ,filename , true                                         , true                                     )
-HANDLEAT_IO1  ( io_statx      , io_statx     , EBPF_READ   , EBPF_F_DEP_ALL  , dfd    ,filename , BPF_CORE_READ(req,flags)&AT_SYMLINK_NOFOLLOW , _statx_is_read (BPF_CORE_READ(req,mask)) )
-HANDLEAT_IO1  ( io_symlinkat  , io_link      , EBPF_WRITE  , EBPF_F_DEP_STAT , new_dfd,newpath  , true                                         , true                                     )
-HANDLEAT_IO1  ( io_unlinkat   , io_unlink    , EBPF_UNLINK , EBPF_F_DEP_STAT , dfd    ,filename , true                                         , !(BPF_CORE_READ(req,flags)&AT_REMOVEDIR) )
-HANDLE_IO1    ( io_getxattr   , io_xattr     , EBPF_NOP    , 0               ,         filename , true                                         , true                                     )
-HANDLE_IO1    ( io_setxattr   , io_xattr     , EBPF_NOP    , 0               ,         filename , true                                         , true                                     )
+// XXX : support kernel 7.0 /!\ as in new kernels, filename may have disappeared when fexit is reached (field __incomplete_filename is not longer valid)
 
-//          io_name       io_type   is_rename
-HANDLE_IO2( io_linkat   , io_link   , false )
-HANDLE_IO2( io_renameat , io_rename , true  )
+// XXX : manage conditional presence of faccessat
+//           io_name         io_typ      kind_expr     flags_expr       dfd_field  no_follow_expr                                 active_expr
+//IO_DO_AT1( io_faccessat  , ???       , EBPF_READ   , EBPF_F_DEP_ALL  , dfd     , false                                        , _access_is_read(BPF_CORE_READ(req,mod )) )
+//IO_DO_AT1( io_faccessat2 , ???       , EBPF_READ   , EBPF_F_DEP_ALL  , dfd     , BPF_CORE_READ(req,flags)&AT_SYMLINK_NOFOLLOW , _access_is_read(BPF_CORE_READ(req,mod )) )
+IO_DO_AT1  ( io_mkdirat    , io_mkdir  , EBPF_NOP    , 0               , dfd     , true                                         , true                                     )
+IO_DO_AT1  ( io_statx      , io_statx  , EBPF_READ   , EBPF_F_DEP_ALL  , dfd     , BPF_CORE_READ(req,flags)&AT_SYMLINK_NOFOLLOW , _statx_is_read (BPF_CORE_READ(req,mask)) )
+IO_DO_AT1  ( io_symlinkat  , io_link   , EBPF_WRITE  , EBPF_F_DEP_STAT , new_dfd , true                                         , true                                     )
+IO_DO_AT1  ( io_unlinkat   , io_unlink , EBPF_UNLINK , EBPF_F_DEP_STAT , dfd     , true                                         , !(BPF_CORE_READ(req,flags)&AT_REMOVEDIR) )
+IO_DO1     ( io_getxattr   , io_xattr  , EBPF_NOP    , 0               ,           true                                         , true                                     )
+IO_DO1     ( io_setxattr   , io_xattr  , EBPF_NOP    , 0               ,           true                                         , true                                     )
+
+//      io_name       io_type   is_rename
+IO_DO2( io_linkat   , io_link   , false )
+IO_DO2( io_renameat , io_rename , true  )

@@ -136,10 +136,10 @@ static constexpr bool SyscallsOk = []() {
 	//
 	bool ok = true ;
 	// tracked syscalls
-	#define X(   name , kind , d1,p1 , d2,p2 , fd,mod,fl,msk,nf ) if ( long nr=MACRO_VAL(SYS_##name  ,-1L) ; nr>=0 ) ok &= ulong(nr)<NSyscalls ;
-	#define X32( name , kind , d1,p1 , d2,p2 , fd,mod,fl,msk,nf ) if ( long nr=MACRO_VAL(SYS32_##name,-1L) ; nr>=0 ) ok &= ulong(nr)<NSyscalls ;
-	#define Y(   name                                           ) if ( long nr=MACRO_VAL(SYS_##name  ,-1L) ; nr>=0 ) ok &= ulong(nr)<NSyscalls ;
-	#define Y32( name                                           ) if ( long nr=MACRO_VAL(SYS32_##name,-1L) ; nr>=0 ) ok &= ulong(nr)<NSyscalls ;
+	#define X(   name , kind , d1,p1 , d2,p2 , mod,fl,msk,nf ) if ( long nr=MACRO_VAL(SYS_##name  ,-1L) ; nr>=0 ) ok &= ulong(nr)<NSyscalls ;
+	#define X32( name , kind , d1,p1 , d2,p2 , mod,fl,msk,nf ) if ( long nr=MACRO_VAL(SYS32_##name,-1L) ; nr>=0 ) ok &= ulong(nr)<NSyscalls ;
+	#define Y(   name                                        ) if ( long nr=MACRO_VAL(SYS_##name  ,-1L) ; nr>=0 ) ok &= ulong(nr)<NSyscalls ;
+	#define Y32( name                                        ) if ( long nr=MACRO_VAL(SYS32_##name,-1L) ; nr>=0 ) ok &= ulong(nr)<NSyscalls ;
 	EBPF_TRACKED_SYSCALLS  (X)
 	EBPF_UNTRACKED_SYSCALLS(Y)
 	#if HAS_32
@@ -157,10 +157,10 @@ static_assert( SyscallsOk ) ;
 static constexpr ::array<::array<EbpfScEntry,NSyscalls>,1+HAS_32> Syscalls = []() {
 	::array<::array<EbpfScEntry,NSyscalls>,2/*is_32*/> res ;
 	// tracked syscalls
-	#define X(  name,kind,d1,p1,d2,p2,fd,mod,fl,msk,nf) if ( long nr=MACRO_VAL(SYS_##name  ,-1L) ; nr>=0 ) res[0][nr] = EBPF_SCE(kind,d1,p1,d2,p2,fd,mod,fl,msk,nf) ;
-	#define X32(name,kind,d1,p1,d2,p2,fd,mod,fl,msk,nf) if ( long nr=MACRO_VAL(SYS32_##name,-1L) ; nr>=0 ) res[1][nr] = EBPF_SCE(kind,d1,p1,d2,p2,fd,mod,fl,msk,nf) ;
-	#define Y(  name                                  ) if ( long nr=MACRO_VAL(SYS_##name  ,-1L) ; nr>=0 ) res[0][nr] = EBPF_SCE(NONE,-1,-1,-1,-1,-1,-1 ,-1,-1 ,-1) ;
-	#define Y32(name                                  ) if ( long nr=MACRO_VAL(SYS32_##name,-1L) ; nr>=0 ) res[1][nr] = EBPF_SCE(NONE,-1,-1,-1,-1,-1,-1 ,-1,-1 ,-1) ;
+	#define X(  name,kind,d1,p1,d2,p2,mod,fl,msk,nf) if ( long nr=MACRO_VAL(SYS_##name  ,-1L) ; nr>=0 ) res[0][nr] = EBPF_SCE(kind,d1,p1,d2,p2,mod,fl,msk,nf) ;
+	#define X32(name,kind,d1,p1,d2,p2,mod,fl,msk,nf) if ( long nr=MACRO_VAL(SYS32_##name,-1L) ; nr>=0 ) res[1][nr] = EBPF_SCE(kind,d1,p1,d2,p2,mod,fl,msk,nf) ;
+	#define Y(  name                               ) if ( long nr=MACRO_VAL(SYS_##name  ,-1L) ; nr>=0 ) res[0][nr] = EBPF_SCE(NONE,-1,-1,-1,-1,-1 ,-1,-1 ,-1) ;
+	#define Y32(name                               ) if ( long nr=MACRO_VAL(SYS32_##name,-1L) ; nr>=0 ) res[1][nr] = EBPF_SCE(NONE,-1,-1,-1,-1,-1 ,-1,-1 ,-1) ;
 	EBPF_TRACKED_SYSCALLS  (X)
 	EBPF_UNTRACKED_SYSCALLS(Y)
 	#if HAS_32

@@ -105,19 +105,15 @@ namespace EbpfDaemon {
 	private :
 		void _handle_event( void* data , size_t sz ) {
 			using namespace std::string_literals ;
-			if (sz<sizeof(EbpfEventHdr)) throw "bad data event"s ;
+			if (sz<sizeof(EbpfEventHdr)) throw "event too short"s ;
 			//
 			EbpfEventHdr const& hdr = *static_cast<EbpfEventHdr const*>(data) ;
 			switch (hdr.kind) {
-				case EBPF_NONE      : throw "bad empty event"s ;                                                               // EBPF_NONE messages should have been filtered out
-				case EBPF_JOB_START : if ( _started) throw "double job start"s        ; if (_done) throw "event while done"s ; _started = true ; break ;
-				case EBPF_JOB_END   : if (!_started) throw "event while not started"s ; if (_done) throw "double job end"s   ; _done    = true ; break ;
-				default             : if (!_started) throw "event while not started"s ; if (_done) throw "event while done"s ;
-			}
-			switch (hdr.kind) {
+				case EBPF_NONE         : throw "empty event"s ;                                                                // EBPF_NONE messages should have been filtered out
 				case EBPF_JOB_START    :
 				case EBPF_PROC_START   :
-				case EBPF_THREAD_START : if ( !_ctxs.insert({ hdr.key , {hdr.pid,hdr.tid} }).second ) throw "double thread start"s ;
+				case EBPF_THREAD_START : if ( !_ctxs.insert({ hdr.key , {hdr.pid,hdr.tid} }).second ) throw "double thread start"s ; break ;
+				case EBPF_JOB_END      : _done = true ;                                                                              break ;
 				default                : ;
 			}
 			ThreadCtx & ctx = _ctxs.at(hdr.key) ;
@@ -128,8 +124,8 @@ namespace EbpfDaemon {
 			switch (hdr.kind) {
 				case EBPF_JOB_END    :
 				case EBPF_PROC_END   :
-				case EBPF_THREAD_END : if ( !_ctxs.erase(hdr.key)      ) throw "double thread end"s ;  break ;
-				default              : if ( hdr.flags & EBPF_F_STOPPED ) _to_wake_up.insert(ctx.pid) ;                         // restart if not ended
+				case EBPF_THREAD_END : if (!_ctxs.erase(hdr.key)   ) throw "double thread end"s ;  break ;
+				default              : if (hdr.flags&EBPF_F_STOPPED) _to_wake_up.insert(ctx.pid) ;                             // restart if not ended
 			}
 			if ( !_to_wake_up.empty() && ring__avail_data_size(ring_buffer__ring(_ring_buf,0/*idx*/))<EBPF_RING_BUF_MARGIN ) { // restart stopped processes when queue level is low enough
 				for( pid_t pid : _to_wake_up ) kill( pid , SIGCONT ) ;

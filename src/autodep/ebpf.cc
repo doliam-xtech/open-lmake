@@ -67,8 +67,8 @@ FileInfo AutodepEbpf::Consumer::_mk_info( EbpfEventHdr const& hdr , ::string con
 		if (!file) return { {} , false/*in_repo*/ } ;
 		file = dir_name_s(file) ;
 		if (!file) {
-			if ( (hdr.kind&EBPF_READDIR) && path.root_id==EBPF_ROOT_ID_REPO ) return { "." , true /*in_repo*/ } ;
-			else                                                              return { {}  , false/*.      */ } ;
+			if ( hdr.kind==EBPF_READDIR && path.root_id==EBPF_ROOT_ID_REPO ) return { "." , true /*in_repo*/ } ;
+			else                                                             return { {}  , false/*.      */ } ;
 		}
 		file << rm_slash ;
 	}
@@ -116,7 +116,6 @@ void AutodepEbpf::Consumer::init(Gather& g) {
 void AutodepEbpf::Consumer::handle_event( ThreadCtx const& ctx , EbpfEventHdr const& hdr , Path const& path ) {
 	SWEAR( hdr.kind>=EBPF_HAS_DATA , hdr.kind ) ;
 	throw_if( hdr.kind==EBPF_PANIC , path.path ) ;
-	if (!path.path) return ;
 	//
 	::pair_s<bool/*in_repo*/> real_lcl = _mk_real( ctx , hdr , path           ) ; if (!real_lcl.first) return ;
 	FileInfo                  fi       = _mk_info(       hdr , real_lcl.first ) ;

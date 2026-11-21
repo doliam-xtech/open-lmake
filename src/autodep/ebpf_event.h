@@ -152,18 +152,17 @@ typedef uint16_t EbpfFlags  ;
 
 typedef uint32_t EbpfScEntry ;
 #define EBPF_SCE_NO_ARG 7u
-#define EBPF_SCE( kind , dfd1 , path1 , dfd2 , path2 , fd , mod , flags , mask , nf ) ( \
+#define EBPF_SCE( kind , dfd1 , path1 , dfd2 , path2 , mod , flags , mask , nf ) ( \
 	( (EbpfScEntry)((EBPF_SC_##kind)&0xf) <<  0 ) \
 |	( (EbpfScEntry)((dfd1          )&0x7) <<  4 ) \
 |	( (EbpfScEntry)((path1         )&0x7) <<  7 ) \
 |	( (EbpfScEntry)((dfd2          )&0x7) << 10 ) \
 |	( (EbpfScEntry)((path2         )&0x7) << 13 ) \
-|	( (EbpfScEntry)((fd            )&0x7) << 16 ) \
-|	( (EbpfScEntry)((mod           )&0x7) << 19 ) \
-|	( (EbpfScEntry)((flags         )&0x7) << 22 ) \
-|	( (EbpfScEntry)((mask          )&0x7) << 25 ) \
-|	( (EbpfScEntry)((nf            )&0x3) << 28 ) \
-|	( (EbpfScEntry)1                      << 30 ) \
+|	( (EbpfScEntry)((mod           )&0x7) << 16 ) \
+|	( (EbpfScEntry)((flags         )&0x7) << 19 ) \
+|	( (EbpfScEntry)((mask          )&0x7) << 22 ) \
+|	( (EbpfScEntry)((nf            )&0x3) << 25 ) \
+|	( (EbpfScEntry)1                      << 27 ) \
 )
 //
 #define EBPF_SCE_KIND( d) ((uint8_t)( ((d)>> 0) & 0xf ))
@@ -171,11 +170,10 @@ typedef uint32_t EbpfScEntry ;
 #define EBPF_SCE_PATH1(d) ((uint8_t)( ((d)>> 7) & 0x7 )) // 1st path   arg
 #define EBPF_SCE_DFD2( d) ((uint8_t)( ((d)>>10) & 0x7 )) // 2nd dir fd arg (none means AT_FDCWD)
 #define EBPF_SCE_PATH2(d) ((uint8_t)( ((d)>>13) & 0x7 )) // 2nd path   arg
-#define EBPF_SCE_FD(   d) ((uint8_t)( ((d)>>16) & 0x7 )) // fd         arg
-#define EBPF_SCE_MOD(  d) ((uint8_t)( ((d)>>19) & 0x7 )) // mode       arg
-#define EBPF_SCE_FLAGS(d) ((uint8_t)( ((d)>>22) & 0x7 )) // flags      arg
-#define EBPF_SCE_MASK( d) ((uint8_t)( ((d)>>25) & 0x7 )) // mask       arg
-#define EBPF_SCE_NF(   d) ((uint8_t)( ((d)>>28) & 0x3 )) // no_follow
+#define EBPF_SCE_MOD(  d) ((uint8_t)( ((d)>>16) & 0x7 )) // mode       arg
+#define EBPF_SCE_FLAGS(d) ((uint8_t)( ((d)>>19) & 0x7 )) // flags      arg
+#define EBPF_SCE_MASK( d) ((uint8_t)( ((d)>>22) & 0x7 )) // mask       arg
+#define EBPF_SCE_NF(   d) ((uint8_t)( ((d)>>25) & 0x3 )) // no_follow
 
 #define EBPF_SC_MAY_NO_FOLLOW 2 // no_follow if   flags&AT_SYMLINK_NOFOLLOW
 #define EBPF_SC_MAY_FOLLOW    3 // no_follow if !(flags&AT_SYMLINK_FOLLOW  )
@@ -321,8 +319,7 @@ static inline bool _open_do_write (int flags) { return !(flags&O_PATH     ) && (
 
 // only necessary on ebpf side, but must be published as skeleton will refer it
 typedef struct {
-	int32_t room     ; // a pessimistic version of the available room in the ring buffer, signed so that fugitive neg values have no impact
-	int32_t overflow ; // true if an event could not be reported, XXX/ : clang does not support other sizes for atomic operations
+	volatile bool overflow ; // true if an event could not be reported
 } JobInfo ;
 
 #endif

@@ -513,10 +513,10 @@ src/autodep/vmlinux.h :
 	@$(BPFTOOL) btf dump file /sys/kernel/btf/vmlinux format c >$@
 src/autodep/ebpf.bpf.o : src/autodep/ebpf.bpf.c src/autodep/ebpf_event.h src/autodep/vmlinux.h
 	@echo $(EBPF_CLANG) -target bpf to $@
-	@$(EBPF_CLANG) -g -O3 -Werror -target bpf -DTARGET_ARCH_$$(uname -m) -iquote . -iquote src/autodep -I $(EBPF_INC_DIR) -c -o $@ $<
+	@$(EBPF_CLANG) -g -O3 -Werror -fms-extensions -Wno-microsoft-anon-tag -target bpf -DTARGET_ARCH_$$(uname -m) -iquote . -iquote src/autodep -I $(EBPF_INC_DIR) -c -o $@ $<
 src/autodep/ebpf.bpf.i : src/autodep/ebpf.bpf.c src/autodep/ebpf_event.h src/autodep/vmlinux.h
 	@echo $(EBPF_CLANG) -target bpf to $@
-	@$(EBPF_CLANG) -Werror -fms-extensions -DTARGET_ARCH_$$(uname -m) -iquote . -iquote src/autodep -I $(EBPF_INC_DIR) -E -o $@ $<
+	@$(EBPF_CLANG) -Werror -DTARGET_ARCH_$$(uname -m) -iquote . -iquote src/autodep -I $(EBPF_INC_DIR) -E -o $@ $<
 src/autodep/ebpf.skel.h : src/autodep/ebpf.bpf.o
 	@echo generate skeleton to $@
 	@$(BPFTOOL) gen skeleton $< name ebpf >$@
