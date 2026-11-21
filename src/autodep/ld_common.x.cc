@@ -313,10 +313,10 @@ struct Mkstemp : AuditAction<Record::Mkstemp,1/*NPaths*/> {
 // magic
 //
 
-static bool/*done*/ _do_magic_symlinkat( const char* target , int dfd , const char* /*path*/ ) {
-	if (dfd!=EBPF_MAGIC_FD) return false/*done*/ ;
+static bool/*done*/ _do_magic_symlinkat( const char* target , int dfd , const char* /*path*/ ) { //!                 done
+	/**/                                                                      if (dfd       !=EBPF_MAGIC_FD ) return false ;
+	EbpfMagicReq const* req = reinterpret_cast<EbpfMagicReq const*>(target) ; if (req->magic!=EBPF_MAGIC_VAL) return false ;
 	//
-	EbpfMagicReq const* req = reinterpret_cast<EbpfMagicReq const*>(target) ;
 	switch (req->proc) { //!                                                 done
 		case EBPF_MAGIC_DISABLE : SWEAR(!_t_loop) ; _t_loop = true  ; return true ;
 		case EBPF_MAGIC_ENABLE  : SWEAR( _t_loop) ; _t_loop = false ; return true ;

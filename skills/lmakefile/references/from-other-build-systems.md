@@ -22,7 +22,7 @@ The numbered references point to the anti-pattern catalog in [good practices](ht
 | Hermeticity via containers per action | Jobs run under autodep spying; for stronger isolation open-lmake has `views`/`repo_view`/`tmp_view`/`chroot_dir` (namespace remapping), still fully tracked. |
 | Ninja/gyp/meson: a generator emits the real build graph | No generation step: rules are regex-parameterized classes, so one rule covers the whole family a generator would enumerate. If you are generating rules in a loop, you usually wanted a stem. |
 | `$(shell ls src/*.c)` / `file(GLOB ...)` | Never glob. Grep the manifest (`LMAKE/manifest`) in a small rule; depend on its output (anti-pattern 2). |
-| Order-only prerequisites (`\| dir`) to create directories | Nothing to do: target directories are handled by open-lmake (`auto_mkdir` exists for legacy chdir-based flows). |
+| Order-only prerequisites (`\| dir`) to create directories | Nothing to do: target directories are handled by open-lmake. |
 | `.DELETE_ON_ERROR`, partial-output paranoia | Built-in: targets are unlinked before run (unless `incremental`), failed jobs do not pollute, `manual`/`quarantine` protect user edits. |
 | `install`/`deploy` bundled in the default target | Keep publishing out of the build graph (or as an explicit separate leaf rule). Build outputs must be reproducible artifacts (anti-patterns 8 and 9). |
 | Version/date/host stamped into binaries at every build | Anti-pattern here: it defeats content-based cutoff. Isolate volatile metadata in one leaf, keep artifacts bit-stable (anti-pattern 9). |

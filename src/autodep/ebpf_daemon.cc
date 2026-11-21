@@ -73,6 +73,7 @@ static constexpr time_t   HelloTimeout = 10 ; // in seconds, a client must not b
 
 static struct ebpf* _g_skel         = nullptr ;
 static int          _g_ring_bufs_fd = -1      ;
+static int          _g_root_tabs_fd = -1      ;
 
 // use constexpr processing rather than                                          #ifdef/#endif so as to discriminate between defined/undefined macros on a single line
 template<::integral I,I DfltVal> consteval I _macro_val_str(const char* n_str) {
@@ -104,7 +105,7 @@ template<::integral I,I DfltVal> consteval I _macro_val_str(const char* n_str) {
 static void _raise_limits() {
 	struct rlimit old_rl = {} ;
 	// open files
-	rlim_t n_open_files = 100+_g_skel->rodata->NJobs*2 ; // 100 : overhead when loading ebpf filter, 2 : ring buf + client socket ;
+	rlim_t n_open_files = 100+_g_skel->rodata->NJobs*3 ; // 100 : overhead when loading ebpf filter, 3 : ring buf + root_tab + client socket ;
 	if (::getrlimit(RLIMIT_NOFILE,&old_rl)!=0) {
 		log_errno("cannot get max number of open files") ;
 		return ;
@@ -220,22 +221,35 @@ private :
 } ;
 
 struct Job {
-	static ::set<EbpfJobId> s_free_ids ;
+	static ::set<EbpfJobId> s_free_ids ;                                                                                                 // ordered to use as small job_ids as possible
 	// cxtors & co
 	Job() {
 		if (s_free_ids.empty()) throw ::format("cannot allocate new idx") ;
-		job_id       = *s_free_ids.begin()                                                                                                            ; s_free_ids.erase(s_free_ids.begin()) ;
-		ring_buf_fd  = ::bpf_map_create( BPF_MAP_TYPE_RINGBUF , nullptr/*map_name*/ , 0/*key_size*/ , 0/*value_size*/ , RingBufSz , nullptr/*opts*/ ) ;
-		uint32_t job_id_32 = job_id ;
-		if (ring_buf_fd<0                                                                    ) throw ::format("job {} : cannot create ring buffer",job_id) ;
-		if (::bpf_map_update_elem( _g_ring_bufs_fd , &job_id_32 , &ring_buf_fd , BPF_ANY )!=0) throw ::format("job {} : cannot register"          ,job_id) ;
-log("new job id : %d",job_id) ;
+		/**/     job_id    = *s_free_ids.begin() ; s_free_ids.erase(s_free_ids.begin()) ;
+		uint32_t job_id_32 = job_id              ;
+		//
+		ring_buf_fd = ::bpf_map_create( BPF_MAP_TYPE_RINGBUF , nullptr/*map_name*/ , 0/*key_size*/ , 0/*value_size*/ , RingBufSz , nullptr/*opts*/ ) ;
+		if (ring_buf_fd<0                                                                    ) throw ::format("job {} : cannot create ring buffer"  ,job_id) ;
+		if (::bpf_map_update_elem( _g_ring_bufs_fd , &job_id_32 , &ring_buf_fd , BPF_ANY )!=0) throw ::format("job {} : cannot register ring buffer",job_id) ;
+		//
+		LIBBPF_OPTS( bpf_map_create_opts , opts , .map_flags=bpf_map__map_flags(_g_skel->maps.root_tab) ) ;
+		root_tab_fd = ::bpf_map_create(
+			BPF_MAP_TYPE_HASH
+		,	nullptr/*map_name*/
+		,	bpf_map__key_size   (_g_skel->maps.root_tab)
+		,	bpf_map__value_size (_g_skel->maps.root_tab)
+		,	bpf_map__max_entries(_g_skel->maps.root_tab)
+		,	&opts
+		) ;
+		if (root_tab_fd<0                                                                    ) throw ::format("job {} : cannot create root table"  ,job_id) ;
+		if (::bpf_map_update_elem( _g_root_tabs_fd , &job_id_32 , &root_tab_fd , BPF_ANY )!=0) throw ::format("job {} : cannot register root table",job_id) ;
 	}
 	~Job() {
-log("exit job id : %d",job_id) ;
-		uint32_t job_id_32  = job_id ;
-		if (::bpf_map_delete_elem( _g_ring_bufs_fd , &job_id_32 )!=0) log_errno(::format("job {} : cannot unregister",job_id).c_str()) ; // cannot throw in dxtor
-		if (ring_buf_fd>=0) ::close(ring_buf_fd) ;
+		uint32_t job_id_32 = job_id ;
+		if (::bpf_map_delete_elem( _g_ring_bufs_fd , &job_id_32 )!=0) log_errno(::format("job {} : cannot unregister ring buffer",job_id).c_str()) ; // cannot throw in dxtor
+		if (::bpf_map_delete_elem( _g_root_tabs_fd , &job_id_32 )!=0) log_errno(::format("job {} : cannot unregister root table" ,job_id).c_str()) ; // .
+		if (ring_buf_fd>=0                                          ) ::close(ring_buf_fd) ;
+		if (root_tab_fd>=0                                          ) ::close(root_tab_fd) ;
 		s_free_ids.insert(job_id) ;
 	}
 	// sevices
@@ -261,6 +275,7 @@ log("exit job id : %d",job_id) ;
 	}
 
 	int       ring_buf_fd = -1 ;
+	int       root_tab_fd = -1 ;
 	EbpfJobId job_id      =  0 ;
 } ;
 ::set<EbpfJobId> Job::s_free_ids ;
@@ -272,11 +287,12 @@ static int _pr( enum libbpf_print_level lvl , const char* fmt , va_list ap ) {
 static void _load_ebpf() {
 	int rc ;
 	/**/              ::libbpf_set_print(_pr                    ) ;
-	_g_skel         = ebpf::open        (                       ) ; if (!_g_skel         ) throw "cannot open autodep ebpf filter"s        ;
-	/**/              _ebpf_init        (_g_skel                ) ;                                                                          // init constant tables
-	rc              = ebpf::load        (_g_skel                ) ; if (rc!=0            ) throw "cannot load autodep ebpf filter"s        ;
-	rc              = ebpf::attach      (_g_skel                ) ; if (rc!=0            ) throw "cannot attach autodep ebpf filter"s      ;
-	_g_ring_bufs_fd = ::bpf_map__fd     (_g_skel->maps.ring_bufs) ; if (_g_ring_bufs_fd<0) throw "cannot open autodep ebpf filter maps"s   ;
+	_g_skel         = ebpf::open        (                       ) ; if (!_g_skel         ) throw "cannot open autodep ebpf filter"s                 ;
+	/**/              _ebpf_init        (_g_skel                ) ;                                                                                   // init constant tables
+	rc              = ebpf::load        (_g_skel                ) ; if (rc!=0            ) throw "cannot load autodep ebpf filter"s                 ;
+	rc              = ebpf::attach      (_g_skel                ) ; if (rc!=0            ) throw "cannot attach autodep ebpf filter"s               ;
+	_g_ring_bufs_fd = ::bpf_map__fd     (_g_skel->maps.ring_bufs) ; if (_g_ring_bufs_fd<0) throw "cannot open autodep ebpf filter ring buffer map"s ;
+	_g_root_tabs_fd = ::bpf_map__fd     (_g_skel->maps.root_tabs) ; if (_g_root_tabs_fd<0) throw "cannot open autodep ebpf filter root table map"s  ;
 	//
 	if (_g_skel->rodata->NJobs  > 1<<(sizeof(EbpfJobId )*8) ) throw "too many job ids"       ;
 	if (_g_skel->rodata->NRoots > 1<<(sizeof(EbpfRootId)*8) ) throw "too many roots per job" ;
@@ -287,7 +303,10 @@ static void _load_ebpf() {
 static const char* _g_exe = nullptr ;
 
 [[noreturn]] static void _usage() {
-	::fprintf( stderr , "usage : %s [lmake|daemon|test]\n" , _g_exe ) ;
+	::fprintf( stderr , "usage : %s [lmake|test]\n" , _g_exe                                                                              ) ;
+	::fprintf( stderr , "without argument            : runs forever as a daemon, useful to start it from systemctl\n"                     ) ;
+	::fprintf( stderr , "with test as first argument : just run the auto-test and exit, useful for sanity check\n"                        ) ;
+	::fprintf( stderr , "with lmake as first argument: it exits after a few minutes of inactivity, only useful for open-lmake internal\n" ) ;
 	::exit(2) ;
 }
 
@@ -296,13 +315,13 @@ void self_test() ;
 int main( int argc , char* argv[] ) {
 	_g_exe = argv[0] ;
 	try {
-		if (argc!=2) _usage() ;
+		if (argc>2) _usage() ;
 		::string arg     = argv[1] ;
 		int      timeout ;
-		if      (arg=="lmake" ) timeout = 300'000 ;                                                                                      // XXX? : auto calibrate by using 100*start_time
-		else if (arg=="daemon") timeout =      -1 ;
-		else if (arg=="test"  ) timeout =       0 ;
-		else                    _usage() ;
+		if      (argc==1     ) timeout =      -1 ;
+		if      (arg=="lmake") timeout = 300'000 ;                                                                                      // XXX? : auto calibrate by using 100*start_time
+		else if (arg=="test" ) timeout =       0 ;
+		else                   _usage() ;
 		//
 		::filesystem::create_directories(SockDir) ;
 		Start start ;
@@ -381,10 +400,10 @@ int main( int argc , char* argv[] ) {
 
 struct Consumer {
 	void handle_event( ThreadCtx const& , EbpfEventHdr const& hdr , Path const& ) {
-		if      (hdr.kind< EBPF_HAS_DATA      ) {}
-		else if (hdr.kind==EBPF_PANIC         ) n_panic++    ;
-		else if (hdr.file_kind==EBPF_FILE_USER) n_unsolved++ ;
-		else                                    n_solved++   ;
+		if      (hdr.kind< EBPF_HAS_DATA         ) {}
+		else if (hdr.kind==EBPF_PANIC            ) n_panic++    ;
+		else if (hdr.file_kind==EBPF_FILE_UNKNOWN) n_unsolved++ ;
+		else                                       n_solved++   ;
 	}
 	// data
 	int n_solved   = 0 ;

@@ -21,16 +21,16 @@
 	#include <errno.h>
 	#include <fcntl.h>
 	#include <limits.h>
-	#include <linux/stat.h>
 	#include <linux/unistd.h>
 	#include <signal.h>
 	#include <stdint.h>
 	#include <stdio.h>
+	#include <sys/stat.h>
 #endif
 
 typedef uint16_t EbpfJobId  ;
 typedef uint16_t EbpfRootId ;
-typedef uint8_t  EbpfFlags  ;
+typedef uint16_t EbpfFlags  ;
 
 #define EBPF_RING_BUF_SZ     (1<<22)               // must be a power of 2 at least 4096
 #define EBPF_RING_BUF_MARGIN (EBPF_RING_BUF_SZ>>2) // stop jobs when available room is below margin, restart them available data is below margin
@@ -228,12 +228,14 @@ typedef enum {
 } EbpfRootIdSpecial ;
 
 typedef struct {
+	uint64_t   magic   ; // must contain EBPF_MAGIC_VAL for this request to be recognized
 	uint8_t    proc    ; // enum : EbpfMagicProc
 	uint64_t   mrkr    ; // if proc=EBPF_MAGIC_REGISTER, ensure job_exec speaks to the right filter
 	EbpfJobId  job_id  ; // if proc=EBPF_MAGIC_REGISTER
 	EbpfRootId root_id ; // if proc=EBPF_MAGIC_ROOT
 	int        fd      ; // if proc=EBPF_MAGIC_ROOT
 } EbpfMagicReq ;
+#define EBPF_MAGIC_VAL 0x8dd43d14b87366f0ULL // any random number
 
 typedef enum {
 	EBPF_NONE
@@ -266,7 +268,7 @@ typedef enum {
 
 typedef enum {
 	EBPF_FILE_NONE    // no info        (not emitted)
-,	EBPF_FILE_USER    // file is not resolved
+,	EBPF_FILE_UNKNOWN // file is not resolved
 ,	EBPF_FILE_IGNORE  // file is simple (not emitted)
 ,	EBPF_FILE_NO_FILE // file is not regular nor sym link
 ,	EBPF_FILE_DIR     // file is a dir (only for rename)
@@ -278,30 +280,31 @@ typedef enum {
 typedef enum {
 	EBPF_F_STOPPED = 1<<0                                          // thread was stopped and must be continued by userland after analysis
 	// only for accesses
-,	EBPF_F_NO_FOLLOW = 1<<1                                        // only for EBPF_FILE_USER, trailing symlink is not followed
+,	EBPF_F_NO_FOLLOW = 1<<1                                        // only for EBPF_FILE_UNKNOWN, trailing symlink is not followed
 ,	EBPF_F_DEP_LNK   = 1<<2                                        // access dep as readlink
 ,	EBPF_F_DEP_REG   = 1<<3                                        // access dep as open
 ,	EBPF_F_DEP_STAT  = 1<<4                                        // sense dep existence
 ,	EBPF_F_OK        = 1<<5
 ,	EBPF_F_SEEN_PROC = 1<<6                                        // a symlink has been followed in /proc, care must be taken in case it is /proc/self or /proc/thread-self
 ,	EBPF_F_SEEN_LNK  = 1<<7                                        // a symlink has been followed during path resolution
+,	EBPF_F_CANON     = 1<<8                                        // file is canonic
 	// aliases
 ,	EBPF_F_DEP_ALL = EBPF_F_DEP_LNK|EBPF_F_DEP_REG|EBPF_F_DEP_STAT // access all aspects of dep, such as with stat
 } EbpfFlag ;
 
 typedef struct {
-	uint32_t   tid       ;                   // thread id in the top-level namespace, only used as a key to identify all the streams
+	uint32_t   key       ;                   // thread id in the top-level namespace, only used as a key to identify all the streams
 	EbpfRootId root_id   ;
 	EbpfFlags  flags     ;
 	uint8_t    kind      ;                   // enum : EbpfKind
 	uint8_t    file_kind ;                   // enum : EbpfFileKind
 	union {
-		uint64_t stamp_ns  ;
-		pid_t    pid_in_ns ;                 // if kind=EBPF_START*
+		uint64_t stamp_ns ;
+		pid_t    pid      ;                 // pid in current namespace, if kind=EBPF_START*
 	} ;
 	union {
-		uint64_t size      ;                 // file size
-		pid_t    tid_in_ns ;                 // if kind=EBPF_START*
+		uint64_t size ;                 // file size
+		pid_t    tid  ;                 // tid in current namespace, if kind=EBPF_START*
 	} ;
 	uint64_t mtime_ns ;                      // st_mtime*10^9+st_mtime_ns before access
 } EbpfEventHdr ;

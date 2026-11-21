@@ -59,7 +59,6 @@ class _RuleBase :
 	side_deps    = {}                         # .
 
 class Rule(_RuleBase) :
-#	auto_mkdir          = False                       # auto mkdir dir in case of chdir
 #	autodep             = 'ld_audit'                  # autodep method : none, ld_audit, ld_preload, ld_preload_jemalloc, ptrace, seccomp
 #	backend             = 'local'                     # may be set anywhere in the inheritance hierarchy if execution must be remote
 #	check_abs_paths     = False                       # check that absolute paths inside the repo are not stored in targets
@@ -105,7 +104,7 @@ class Rule(_RuleBase) :
 #	readdir_ok          = False                       # if set, listing a local non-ignored dir is not an error
 #	repo_view           = '/repo'                     # absolute path under which the root dir of the repo is seen (if None, empty, or absent, no bind mount is done)
 #	retried_errors      = ('-timeout',)               # kind of errors that are retried when --retry-on-error=<cnt> option is passed to lmake
-	shell               = ('$SHELL',)                 # shell  used for str      cmd (_sh is usually /bin/sh which may test for dir existence before chdir, which defeats auto_mkdir)
+	shell               = ('$SHELL',)                 # shell  used for str cmd
 	start_delay         = 3                           # delay before sending a start message if job is not done by then, 3 is a reasonable compromise
 #	stderr_ok           = False                       # if set, writing to stderr is not an error but a warning
 #	timeout             = None                        # timeout allocated to job execution (in s), must be None or a float

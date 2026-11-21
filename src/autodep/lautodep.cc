@@ -24,8 +24,7 @@ using namespace Py   ;
 using namespace Time ;
 
 enum class CmdFlag : uint8_t {
-	AutoMkdir
-,	AutodepMethod
+	AutodepMethod
 ,	ChrootDir
 ,	ChrootActions
 ,	Codecs
@@ -141,8 +140,7 @@ int main( int argc , char* argv[] ) {
 	#endif
 	autodep_method_doc << ')' ;
 	Syntax<CmdFlag> syntax {{
-		{ CmdFlag::AutoMkdir       , { .short_name='a' , .has_arg=false , .doc="automatically create dir upon chdir"                                                                         } }
-	,	{ CmdFlag::ChrootDir       , { .short_name='c' , .has_arg=true  , .doc="dir which to chroot to before execution"                                                                     } }
+		{ CmdFlag::ChrootDir       , { .short_name='c' , .has_arg=true  , .doc="dir which to chroot to before execution"                                                                     } }
 	,	{ CmdFlag::ChrootActions   , { .short_name='C' , .has_arg=true  , .doc="list of actions (comma separated) to carry out when chroot, actions are among 'user_name' and 'resolv_conf'" } }
 	,	{ CmdFlag::Cwd             , { .short_name='d' , .has_arg=true  , .doc="current working directory in which to execute job"                                                           } }
 	,	{ CmdFlag::ReaddirOk       , { .short_name='D' , .has_arg=false , .doc="allow reading local non-ignored dirs"                                                                        } }
@@ -204,7 +202,6 @@ int main( int argc , char* argv[] ) {
 		if (cmd_line.flags[CmdFlag::LmakeView    ]) job_space.lmake_view_s      = with_slash            (cmd_line.flag_args[+CmdFlag::LmakeView      ]) ;
 		if (cmd_line.flags[CmdFlag::RepoView     ]) job_space.repo_view_s       = with_slash            (cmd_line.flag_args[+CmdFlag::RepoView       ]) ;
 		if (cmd_line.flags[CmdFlag::TmpView      ]) job_space.tmp_view_s        = with_slash            (cmd_line.flag_args[+CmdFlag::TmpView        ]) ;
-		/**/                                        autodep_env.auto_mkdir      =                        cmd_line.flags    [ CmdFlag::AutoMkdir      ]  ;
 		/**/                                        autodep_env.ext_read_ok     =                        cmd_line.flags    [ CmdFlag::ExternalReadOk ]  ;
 		/**/                                        autodep_env.ext_write_ok    =                        cmd_line.flags    [ CmdFlag::ExternalWriteOk]  ;
 		/**/                                        autodep_env.io_uring_ok     =                        cmd_line.flags    [ CmdFlag::IoUringOk      ]  ;

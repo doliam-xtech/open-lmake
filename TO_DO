@@ -188,7 +188,6 @@ X gather stdout/stderr from running job_exec when lshow -o/-e
 	- such as SEC("seccomp") int filter_syscalls(struct seccomp_data *ctx) { if (...) return SECCOMP_RET_USER_NOTIF ; else return SECCOMP_RET_ALLOW ; }
 * implement a python API to explore DAG
 * provide a config.dir_regexpr entry
-	- if auto_mkdir, create dirs each time a matching file name is seen
 	- allow using fuse as a autodep method
 	- more robust to history
 * provide external access control

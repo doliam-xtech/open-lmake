@@ -23,8 +23,6 @@ if __name__!='__main__' :
 	,	*(f'autodep.{ad}.ref' for ad in lmake.autodeps)
 	,	'resources.1.ref'
 	,	'resources.2.ref'
-	,	'auto_mkdir.no.ref'
-	,	'auto_mkdir.yes.ref'
 	)
 
 	from step         import step
@@ -126,14 +124,6 @@ if __name__!='__main__' :
 			return File=='yes'
 		cmd = 'echo hello >&2'
 
-	class AutoMkdir(Rule) :
-		target    = r'auto_mkdir.{File:\w*}'
-		stderr_ok = True
-		def auto_mkdir() :
-			if step==1 : raise RuntimeError
-			return File=='yes'
-		cmd = 'cd auto ; cat ../hello ; :'
-
 	class Cmd(Rule) :
 		target = 'cmd'
 		deps   = { 'HELLO' : 'hello' }
@@ -153,10 +143,8 @@ else :
 	print('hello\nhello\nhello',file=open('env.hello.ref'              ,'w'))
 	print(1                    ,file=open('resources.1.ref'            ,'w'))
 	print(2                    ,file=open('resources.2.ref'            ,'w'))
-	print('hello'              ,file=open('auto_mkdir.yes.ref'         ,'w'))
 	#
 	for ad in lmake.autodeps : print('hello',file=open(f'autodep.{ad}.ref','w'))
-	open('auto_mkdir.no.ref','w')
 	#
 	print(textwrap.dedent('''
 		def local_func(f) : return f
@@ -180,8 +168,6 @@ else :
 		ut.lmake( 'max_stderr_len.2'           , done=rc     , steady=1-rc , failed=0  , new=0    ,                     rc=0  )
 		ut.lmake( 'stderr_ok.no'               , done=0      , steady=0    , failed=1  , new=0    , early_rerun=rc    , rc=1  )
 		ut.lmake( 'stderr_ok.yes'              , done=1-rc   , steady=0    , failed=rc , new=0    , early_rerun=rc    , rc=rc )
-		ut.lmake( 'auto_mkdir.no.ok'           , done=2-rc*2 , steady=0    , failed=rc , new=rc   , early_rerun=rc    , rc=rc )
-		ut.lmake( 'auto_mkdir.yes.ok'          , done=2-rc*2 , steady=0    , failed=rc , new=rc   , early_rerun=rc    , rc=rc )
 		ut.lmake( 'cmd'                        , done=1-rc   , steady=0    , failed=rc , new=0    , early_rerun=...   , rc=rc )          # python3.6 accesses file <code> to report backtrace, ...
 		#                                                                                                                                # ... pytho3.12 does not
 		for ad in lmake.autodeps : ut.lmake( f'autodep.{ad}.ok' , done=2-rc*2 , steady=0 , failed=rc , new=rc , early_rerun=rc , rc=rc )

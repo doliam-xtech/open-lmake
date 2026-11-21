@@ -571,6 +571,37 @@ you can make a Debian package:</p>
 <li>put <code>/path/to/open-lmake/bin</code> in your <code>$PATH</code></li>
 </ul>
 <p>This will simplify the user experience but is not required.</p>
+<h1 id="ebpf-experimental"><a class="header" href="#ebpf-experimental">EBPF (experimental)</a></h1>
+<p>The installation of the ebpf daemon is somewhat delicate as it is required to be suid-root in the top-level namespace.
+Also, it is rather sensitive to kernel variations.</p>
+<p>The major consequences are:</p>
+<ul>
+<li>at compilation time, a password may be asked to make <code>_bin/lmake_ebpfd</code> suid-root</li>
+<li>open-lmake must be installed on a local disk
+<ul>
+<li>alternatively, <code>lmake_ebpfd</code> may be copied to a local disk and a symbolic link may replace the original file in <code>&lt;install_dir&gt;/_bin/lmake_ebpfd</code> to point to it</li>
+</ul>
+</li>
+<li>at run-time, jobs must be launched on physical hosts or vm's, but not in a contenerized environment such as a docker image</li>
+<li>at run-time, whenever the daemon is started, it runs an auto-test to ensure the hooks in the ebpf filter are correctly attached inside the kernel</li>
+</ul>
+<p>In order to accept to make <code>lmake_ebpfd</code> suid-root, the user doing the installation may want to audit it.
+To that purpose, the daemon has been written so as to be as simple as possible to audit.
+The points to verify are:</p>
+<ul>
+<li>the daemon (<code>src/autodep/ebpf_daemon.cc</code>) does nothing else than installing the ebpf filter (<code>src/autodep/ebpf.bpf.c</code>) and connect incoming jobs to it</li>
+<li>the ebpf filter observes nothing on jobs that are not connected to it from the daemon
+<ul>
+<li>it does intercept all syscalls, but the very first instruction is to exit when not from a tracked process</li>
+</ul>
+</li>
+<li>the ebpf filter may send a <code>SIGSTOP</code> signal to controlled processes, you may want to verify that it cannot stop any non-tracked process</li>
+<li>note that beyond sending signals, ebpf filters have basically no possbility to otherwise modify the system behavior</li>
+</ul>
+<p>The ebpf daemon starts and ends automatically on demand.
+Because the start-up time is about a few seconds, it is only stoopped after a few minutes of inactivity.
+The purpose is to ensure that there is no performance alteration at all when the host is busy at tasks totally unrelated to open-lmake.</p>
+<p>Alternatively, it is possible to start the daemon from systemctl. It must then be executed as <code>lmake_ebpfd daemon</code>.</p>
 <h1 id="apparmor"><a class="header" href="#apparmor">AppArmor</a></h1>
 <p>AppArmor tuning is currently only known to be required on Ubuntu starting at 24.04.</p>
 <p>If open-lmake is installed with the Debian package, there is nothing to do.
@@ -606,7 +637,7 @@ The accesses they make are not tracked and a message such as the following is wr
 <h1 id="rationale"><a class="header" href="#rationale">Rationale</a></h1>
 <p>Because of its unique features (auto-dep, views, ...), open-lmake is necessarily tighly coupled to the underlying OS.
 In particular, it was not possible to write it solely on top of Posix.</p>
-<p>There are no known road blocks to port it to other OSes (such as Darwin or Windows) although this would require an in depth knowledge of these systems.</p>
+<p>There are no known road blocks to port it to other OSes (such as Darwin or Windows) although this requires an in depth knowledge of these systems.</p>
 <div style="break-before: page; page-break-before: always;"></div><!-- This file is part of the open-lmake distribution (git@github.com:doliam-xtech/open-lmake.git)-->
 <!-- Copyright (c) 2023-2026 Doliam-->
 <!-- This program is free software: you can redistribute/modify under the terms of the GPL-v3 (https://www.gnu.org/licenses/gpl-3.0.html).-->
@@ -1471,24 +1502,9 @@ This means:</p>
 </li>
 </ul>
 <h2 id="attributes"><a class="header" href="#attributes">Attributes</a></h2>
-<h3 id="auto_mkdir"><a class="header" href="#auto_mkdir"><a href="unit_tests/chdir.html#:~:text=auto%5Fmkdir%20%3D%20step%3D%3D2"><code>auto_mkdir</code></a></a></h3>
-<div class="table-wrapper"><table><thead><tr><th>Inheritance</th><th>Type</th><th>Default</th><th>Dynamic</th><th>Example</th></tr></thead><tbody>
-<tr><td>python</td><td><code>bool</code></td><td><code>False</code></td><td>Full</td><td><code>True</code></td></tr>
-</tbody></table>
-</div>
-<p>When this attribute has a true value, executing a <code>chdir</code> syscall (e.g. executing <code>cd</code> in bash) will create the target dir if it does not exist.</p>
-<p>This is useful for scripts in situations such as:</p>
-<ul>
-<li>The script does <code>chdir a</code>.</li>
-<li>Then try to read file <code>b</code> from there.</li>
-<li>What is expected is to have a dep on <code>a/b</code> which may not exist initially but will be created by some other job.</li>
-<li>However, if dir <code>a</code> does not exist, the <code>chdir</code> call fails and the file which is open for reading is <code>b</code> instead of <code>a/b</code>.</li>
-<li>As a consequence, no dep is set for <code>a/b</code> and the problem will not be resolved by a further re-execution.</li>
-<li>Setting this attribute to true creates dir <code>a</code> on the fly when <code>chdir</code> is called so that it succeeds and the correct dep is set.</li>
-</ul>
 <h3 id="autodep"><a class="header" href="#autodep"><a href="unit_tests/ptrace.html#:~:text=autodep%20%3D%20%27ptrace"><code>autodep</code></a></a></h3>
 <div class="table-wrapper"><table><thead><tr><th>Inheritance</th><th>Type</th><th>Default</th><th>Dynamic</th><th>Example</th></tr></thead><tbody>
-<tr><td>python</td><td><code>f-str</code></td><td><code>'ld_audit'</code> if supported else <code>'ld_preload'</code></td><td>Full</td><td><code>'ptrace'</code></td></tr>
+<tr><td>python</td><td><code>f-str</code></td><td>first supported in <code>'ebpf'</code>, <code>'ld_audit'</code> or <code>'ld_preload'</code></td><td>Full</td><td><code>'ptrace'</code></td></tr>
 </tbody></table>
 </div>
 <p>This attribute specifies the method used by <a href="autodep.html">autodep</a> to discover hidden deps.</p>
@@ -2295,7 +2311,7 @@ The numbered references point to the anti-pattern catalog in <a href="https://do
 <tr><td>Hermeticity via containers per action</td><td>Jobs run under autodep spying; for stronger isolation open-lmake has <code>views</code>/<code>repo_view</code>/<code>tmp_view</code>/<code>chroot_dir</code> (namespace remapping), still fully tracked.</td></tr>
 <tr><td>Ninja/gyp/meson: a generator emits the real build graph</td><td>No generation step: rules are regex-parameterized classes, so one rule covers the whole family a generator would enumerate. If you are generating rules in a loop, you usually wanted a stem.</td></tr>
 <tr><td><code>$(shell ls src/*.c)</code> / <code>file(GLOB ...)</code></td><td>Never glob. Grep the manifest (<code>LMAKE/manifest</code>) in a small rule; depend on its output (anti-pattern 2).</td></tr>
-<tr><td>Order-only prerequisites (<code>| dir</code>) to create directories</td><td>Nothing to do: target directories are handled by open-lmake (<code>auto_mkdir</code> exists for legacy chdir-based flows).</td></tr>
+<tr><td>Order-only prerequisites (<code>| dir</code>) to create directories</td><td>Nothing to do: target directories are handled by open-lmake.</td></tr>
 <tr><td><code>.DELETE_ON_ERROR</code>, partial-output paranoia</td><td>Built-in: targets are unlinked before run (unless <code>incremental</code>), failed jobs do not pollute, <code>manual</code>/<code>quarantine</code> protect user edits.</td></tr>
 <tr><td><code>install</code>/<code>deploy</code> bundled in the default target</td><td>Keep publishing out of the build graph (or as an explicit separate leaf rule). Build outputs must be reproducible artifacts (anti-patterns 8 and 9).</td></tr>
 <tr><td>Version/date/host stamped into binaries at every build</td><td>Anti-pattern here: it defeats content-based cutoff. Isolate volatile metadata in one leaf, keep artifacts bit-stable (anti-pattern 9).</td></tr>
@@ -3122,13 +3138,12 @@ Because it is loaded before and contains the same symbols as the <code>libc</cod
 The reason is that the spying code requires the use of <code>malloc</code> at start up, and <code>jemalloc</code> (which is called in lieu of <code>malloc</code>) accesses a configuration file at start up.
 A special implementation has been devised to handle this case, but is too fragile and complex to make it the default <code>$LD_PRELOAD</code> method.</p>
 <h2 id="spying-methods-based-on-system-calls"><a class="header" href="#spying-methods-based-on-system-calls">Spying methods based on system calls</a></h2>
-<h3 id="ebpf-experimental"><a class="header" href="#ebpf-experimental">ebpf (experimental)</a></h3>
+<h3 id="ebpf-experimental-1"><a class="header" href="#ebpf-experimental-1">ebpf (experimental)</a></h3>
 <p>The principle is to use the eBPF feature (extended BPF) of modern linux systems : small programs are attached to hooks in the kernel and report job accesses.</p>
 <p>Everything is captured in the kernel when the access occurs (the resolved path, the state of the file before it is modified, the traversed symbolic links),
 so accesses are reliably known although they are processed asynchronously.
 Files that can be neither deps nor targets (the vast majority, such as those lying in <code>/usr</code>) are filtered out in the kernel, which makes this method fast.</p>
-<p>This is a non-intrusive approach : the job is not modified in any way and all accesses are seen, including those from statically linked programs and those done through <code>io_uring</code>.
-As accesses are observed and not intercepted, features that need to act before a system call executes are not supported (<code>auto_mkdir</code>).</p>
+<p>This is a non-intrusive approach : the job is not modified in any way and all accesses are seen, including those from statically linked programs and those done through <code>io_uring</code>.</p>
 <p>The major drawback is linked to security : installing a eBPF filter requires to be privileged, which implies the presence of a root daemon (<code>_bin/lmake_ebpfd</code>) that jobs connect to.
 At start-up, this daemon checks that the kernel hooks it relies on are operational, and refuses to run if they are not.</p>
 <h3 id="ptrace"><a class="header" href="#ptrace">ptrace</a></h3>

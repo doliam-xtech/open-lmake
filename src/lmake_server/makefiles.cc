@@ -185,7 +185,7 @@ namespace Engine::Makefiles {
 		::string tmp_dir_s = cat(AdminDirS,"lmakefile_tmp/",action,'/') ;
 		Gather   gather    ;
 		//
-		gather.method                     = AutodepMethod::DfltLd                                                                                                     ; // non-ld are not supported
+		gather.method                     = AutodepMethod::Makefile                                                                                                   ;
 		gather.autodep_env                = Record::s_autodep_env()                                                                                                   ;
 		gather.autodep_env.fqdn           = fqdn()                                                                                                                    ;
 		gather.autodep_env.src_dirs_s     = {"/"}                                                                                                                     ;

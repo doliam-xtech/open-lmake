@@ -19,7 +19,7 @@ struct AutodepEbpf {
 		// services
 		void handle_event( EbpfDaemon::ThreadCtx const& , EbpfEventHdr const& , EbpfDaemon::Path const& file ) ;
 	private :
-	::pair_s<bool/*in_repo*/> _mk_file( EbpfDaemon::ThreadCtx const& , EbpfEventHdr const& , EbpfDaemon::Path const& ) ;
+	::pair_s<bool/*in_repo*/> _mk_real( EbpfDaemon::ThreadCtx const& , EbpfEventHdr const& , EbpfDaemon::Path const& ) ;
 	Disk::FileInfo            _mk_info(                                EbpfEventHdr const& , ::string const& ={}     ) ;
 		// data
 		Gather*     _gather = nullptr ;

@@ -264,7 +264,6 @@ namespace Engine {
 		// services
 		template<IsStream S> void serdes(S& s) {
 			::serdes( s , chroot_dir_s    ) ;
-			::serdes( s , auto_mkdir      ) ;
 			::serdes( s , env             ) ;
 			::serdes( s , ignore_stat     ) ;
 			::serdes( s , interpreter     ) ;
@@ -273,7 +272,6 @@ namespace Engine {
 		}
 		void update( Py::Dict const& py_dct ) {
 			using namespace Attrs ;
-			Attrs::acquire_from_dct( auto_mkdir             , dyn_auto_mkdir      , py_dct , "auto_mkdir"      ) ;
 			Attrs::acquire_from_dct( chroot_dir_s           , dyn_chroot_dir_s    , py_dct , "chroot_dir"      ) ; if (+chroot_dir_s) add_slash(chroot_dir_s) ;
 			Attrs::acquire_env     ( env                    , dyn_env             , py_dct , "env"             ) ;
 			Attrs::acquire_from_dct( ignore_stat            , dyn_ignore_stat     , py_dct , "ignore_stat"     ) ;
@@ -287,7 +285,6 @@ namespace Engine {
 		// data
 		// START_OF_VERSIONING REPO
 		::string   chroot_dir_s    ;         bool        dyn_chroot_dir_s    = false ;
-		bool       auto_mkdir      = false ; bool        dyn_auto_mkdir      = false ;
 		::vmap_ss  env             ;         IsDynMap    dyn_env             = {}    ;
 		bool       ignore_stat     = false ; bool        dyn_ignore_stat     = false ;
 		::vector_s interpreter     ;         IsDynVector dyn_interpreter     = {}    ;

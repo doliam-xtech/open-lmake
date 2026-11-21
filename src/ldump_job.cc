@@ -46,7 +46,6 @@ void print_pre_start(JobStartRpcReq const& jsrr) {
 void print_start(JobStartRpcReply const& jsrr) {
 	g_out << "--start--\n" ;
 	//
-	g_out << "auto_mkdir        : "<<jsrr.autodep_env.auto_mkdir     <<'\n' ;
 	g_out << "cache             : "<<jsrr.cache                      <<'\n' ;
 	g_out << "check_abs_paths   : "<<jsrr.chk_abs_paths              <<'\n' ;
 	g_out << "chroot_actions    : "<<jsrr.chroot_info.actions        <<'\n' ;

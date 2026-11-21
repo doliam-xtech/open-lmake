@@ -69,8 +69,8 @@ namespace EbpfDaemon {
 	} ;
 
 	struct ThreadCtx {
-		pid_t pid_in_ns = 0 ;
-		pid_t tid_in_ns = 0 ;
+		pid_t pid = 0 ;
+		pid_t tid = 0 ;
 	} ;
 
 	template<class Consumer> struct RingBuf : RingBufBase {
@@ -83,7 +83,7 @@ namespace EbpfDaemon {
 		// cxtors & co
 	public :
 		RingBuf(              ) = default ;
-		RingBuf(RingBuf const&) = delete  ;                                            // not copyable nor movable (this is recorded inside _ring_buf as its ctx)
+		RingBuf(RingBuf const&) = delete  ;                                               // not copyable nor movable (this is recorded inside _ring_buf as its ctx)
 		RingBuf( EbpfJobId jid , int rbfd ) : RingBufBase{jid,rbfd} { init() ; }
 		~RingBuf() {
 			if (epoll_fd!=-1) ::close            (epoll_fd ) ;
@@ -96,7 +96,7 @@ namespace EbpfDaemon {
 			epoll_fd  = ::ring_buffer__epoll_fd(_ring_buf)                                            ;
 		}
 		// services
-		bool/*done*/ consume() {                                                       // consume available events
+		bool/*done*/ consume() {                                                          // consume available events
 			_msg = {} ;
 			::ring_buffer__consume(_ring_buf) ;
 			if (_msg.empty()) return _done ;
@@ -117,10 +117,10 @@ namespace EbpfDaemon {
 			switch (hdr.kind) {
 				case EBPF_JOB_START    :
 				case EBPF_PROC_START   :
-				case EBPF_THREAD_START : if ( !_ctxs.insert({ hdr.tid , {hdr.pid_in_ns,hdr.tid_in_ns} }).second ) throw "double thread start"s ;
+				case EBPF_THREAD_START : if ( !_ctxs.insert({ hdr.key , {hdr.pid,hdr.tid} }).second ) throw "double thread start"s ;
 				default                : ;
 			}
-			ThreadCtx & ctx = _ctxs.at(hdr.tid) ;
+			ThreadCtx & ctx = _ctxs.at(hdr.key) ;
 			if (hdr.kind>=EBPF_HAS_DATA) {
 				Path path { hdr.root_id , { static_cast<const char*>(data)+sizeof(EbpfEventHdr) , sz-sizeof(EbpfEventHdr) } } ;
 				consumer.handle_event( ctx , hdr , path ) ;
@@ -128,8 +128,8 @@ namespace EbpfDaemon {
 			switch (hdr.kind) {
 				case EBPF_JOB_END    :
 				case EBPF_PROC_END   :
-				case EBPF_THREAD_END : if ( !_ctxs.erase(hdr.tid)      ) throw "double thread end"s ;        break ;
-				default              : if ( hdr.flags & EBPF_F_STOPPED ) _to_wake_up.insert(ctx.pid_in_ns) ;                   // restart if not ended
+				case EBPF_THREAD_END : if ( !_ctxs.erase(hdr.key)      ) throw "double thread end"s ;  break ;
+				default              : if ( hdr.flags & EBPF_F_STOPPED ) _to_wake_up.insert(ctx.pid) ;                         // restart if not ended
 			}
 			if ( !_to_wake_up.empty() && ring__avail_data_size(ring_buffer__ring(_ring_buf,0/*idx*/))<EBPF_RING_BUF_MARGIN ) { // restart stopped processes when queue level is low enough
 				for( pid_t pid : _to_wake_up ) kill( pid , SIGCONT ) ;
@@ -141,12 +141,12 @@ namespace EbpfDaemon {
 		int      epoll_fd = -1 ;
 		Consumer consumer ;
 	private :
-		::ring_buffer*                      _ring_buf   = nullptr ;
-		std::unordered_map<pid_t,ThreadCtx> _ctxs       ;                                                                      // context of currently handled syscall
-		std::unordered_set<pid_t>           _to_wake_up ;                                                                      // pids to wake up when ring_buffer has enough room
-		std::string                         _msg        ;
-		bool                                _started    = false   ;
-		bool                                _done       = false   ;
+		::ring_buffer*                         _ring_buf   = nullptr ;
+		std::unordered_map<uint32_t,ThreadCtx> _ctxs       ;                                                                   // context of currently handled syscall
+		std::unordered_set<pid_t>              _to_wake_up ;                                                                   // pids to wake up when ring_buffer has enough room
+		std::string                            _msg        ;
+		bool                                   _started    = false   ;
+		bool                                   _done       = false   ;
 	} ;
 
 }

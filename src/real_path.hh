@@ -34,8 +34,8 @@ struct RealPathEnv {
 	// accesses
 	void operator>>(::string&) const ;
 	// services
-	FileLoc file_loc(::string const& file) const ;
-	void    chk     (bool for_cache=false) const ;
+	::pair_s<FileLoc> file_loc(::string const& file) const ;
+	void              chk     (bool for_cache=false) const ;
 	// data
 	// START_OF_VERSIONING CACHE JOB REPO
 	FileSync   file_sync   = {}               ;

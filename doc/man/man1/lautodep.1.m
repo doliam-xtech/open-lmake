@@ -34,9 +34,6 @@ Bullet Deps    : a kind of ascii art render parallel accesses.
 
 .SH OPTIONS
 
-Item(B_(-a),B_(--auto-mkdir))
-Mimic setting the rule attribute B_(auto_mkdir)=I_(True).
-
 Item(B_(-c) I_(abs_dir),B_(--chroot-dir)=I_(abs_dir))
 Mimic setting the rule attribute B_(chroot_dir)=I_(abs_dir).
 

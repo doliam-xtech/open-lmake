@@ -463,7 +463,6 @@ namespace Backends {
 		if (steps[StartStep::CmdAttrs]) {
 			reply.chroot_info.dir_s           = ::move(start_cmd_attrs.chroot_dir_s   ) ;
 			reply.interpreter                 = ::move(start_cmd_attrs.interpreter    ) ;
-			reply.autodep_env.auto_mkdir      =        start_cmd_attrs.auto_mkdir       ;
 			reply.autodep_env.ignore_stat     =        start_cmd_attrs.ignore_stat      ;
 			reply.autodep_env.mount_chroot_ok =        start_cmd_attrs.mount_chroot_ok  ;
 			reply.job_space                   = ::move(start_cmd_attrs.job_space      ) ;

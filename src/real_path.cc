@@ -33,23 +33,25 @@ void RealPathEnv::operator>>(::string& os) const {       // START_OF_NO_COV
 }                                                        // END_OF_NO_COV
 
 // /!\ : this code must be in sync with RealPath::solve
-FileLoc RealPathEnv::file_loc(::string const& real) const {
+::pair_s<FileLoc> RealPathEnv::file_loc(::string const& real) const {
 	::string abs_real = mk_glb(real,repo_root_s) ;
-	if (+tmp_dir_s) { if (abs_real.starts_with(tmp_dir_s   )) return FileLoc::Tmp  ; }
-	else            { if (abs_real.starts_with(P_tmpdir "/")) return FileLoc::Tmp  ; }
+	if (+tmp_dir_s) { if (abs_real.starts_with(tmp_dir_s   )) return { abs_real , FileLoc::Tmp } ; }
+	else            { if (abs_real.starts_with(P_tmpdir "/")) return { abs_real , FileLoc::Tmp } ; }
 	//
-	if (abs_real.starts_with("/proc/")) return FileLoc::Proc ;
-	if (abs_real.starts_with("/dev/" )) return FileLoc::Proc ; // cf. RealPath::solve
+	if (abs_real.starts_with("/proc/")) return { abs_real , FileLoc::Proc } ;
+	if (abs_real.starts_with("/dev/" )) return { abs_real , FileLoc::Proc } ; // cf. RealPath::solve
 	//
+	::string rel_real = is_abs(real) ? mk_lcl(real,repo_root_s) : real ;
 	if (abs_real.starts_with(substr_view(repo_root_s,0,repo_root_s.size()-1)))
 		switch (abs_real[repo_root_s.size()-1]) {
-			case 0   : return FileLoc::RepoRoot                                       ;
-			case '/' : return _lcl_file_loc(substr_view(abs_real,repo_root_s.size())) ;
+			case 0   : return { "."      , FileLoc::RepoRoot                                       } ;
+			case '/' : return { rel_real , _lcl_file_loc(substr_view(abs_real,repo_root_s.size())) } ;
 		DN}
-	::string lcl_real = mk_lcl(real,repo_root_s) ;
-	for( ::string const& sd_s : src_dirs_s )
-		if ( lies_within( is_abs(sd_s)?abs_real:lcl_real , sd_s ) ) return FileLoc::SrcDir ;
-	return FileLoc::Ext ;
+	for( ::string const& sd_s : src_dirs_s ) {
+		::string const& r = is_abs(sd_s) ? abs_real : rel_real ;
+		if (lies_within(r,sd_s)) return { r , FileLoc::SrcDir } ;
+	}
+	return { abs_real , FileLoc::Ext } ;
 }
 
 void RealPathEnv::chk(bool for_cache) const {

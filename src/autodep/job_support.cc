@@ -39,8 +39,9 @@ namespace JobSupport {
 	void set_enable(bool en) {
 		if (en==!_t_disabled) return ;
 		EbpfMagicReq req ;
-		if (en) req.proc = EBPF_MAGIC_ENABLE  ;
-		else    req.proc = EBPF_MAGIC_DISABLE ;
+		/**/    req.magic = EBPF_MAGIC_VAL     ; // compulsery for req to be recognized
+		if (en) req.proc  = EBPF_MAGIC_ENABLE  ;
+		else    req.proc  = EBPF_MAGIC_DISABLE ;
 		int rc = ::symlinkat( reinterpret_cast<const char*>(&req) , EBPF_MAGIC_FD , "" ) ; (void)rc ;
 		_t_disabled = !en ;
 	}

@@ -82,28 +82,11 @@ The restrictions are the following:
 
 ## Attributes
 
-### [`auto_mkdir`](unit_tests/chdir.html#:~:text=auto%5Fmkdir%20%3D%20step%3D%3D2)
-
-| Inheritance | Type   | Default | Dynamic | Example |
-|-------------|--------|---------|---------|---------|
-| python      | `bool` | `False` | Full    | `True`  |
-
-When this attribute has a true value, executing a `chdir` syscall (e.g. executing `cd` in bash) will create the target dir if it does not exist.
-
-This is useful for scripts in situations such as:
-
-- The script does `chdir a`.
-- Then try to read file `b` from there.
-- What is expected is to have a dep on `a/b` which may not exist initially but will be created by some other job.
-- However, if dir `a` does not exist, the `chdir` call fails and the file which is open for reading is `b` instead of `a/b`.
-- As a consequence, no dep is set for `a/b` and the problem will not be resolved by a further re-execution.
-- Setting this attribute to true creates dir `a` on the fly when `chdir` is called so that it succeeds and the correct dep is set.
-
 ### [`autodep`](unit_tests/ptrace.html#:~:text=autodep%20%3D%20%27ptrace)
 
-| Inheritance | Type    | Default                                       | Dynamic | Example    |
-|-------------|---------|-----------------------------------------------|---------|------------|
-| python      | `f-str` | `'ld_audit'` if supported else `'ld_preload'` | Full    | `'ptrace'` |
+| Inheritance | Type    | Default                                                     | Dynamic | Example    |
+|-------------|---------|-------------------------------------------------------------|---------|------------|
+| python      | `f-str` | first supported in `'ebpf'`, `'ld_audit'` or `'ld_preload'` | Full    | `'ptrace'` |
 
 This attribute specifies the method used by [autodep](autodep.html) to discover hidden deps.
 

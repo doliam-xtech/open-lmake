@@ -25,6 +25,8 @@
 	X( getdents64        , READDIR   , -1 ,-1   , -1 ,-1   ,  0 , -1 , -1  , -1 , EBPF_SC_MAY_NO_FOLLOW ) \
 	X( link              , LINK      , -1 , 0   , -1 , 1   , -1 , -1 , -1  , -1 , 0                     ) \
 	X( linkat            , LINK      ,  0 , 1   ,  2 , 3   , -1 , -1 ,  4  , -1 , EBPF_SC_MAY_FOLLOW    ) \
+	X( mkdir             , PATH      , -1 , 0   , -1 ,-1   , -1 ,  1 , -1  , -1 , 1                     ) \
+	X( mkdirat           , PATH      ,  0 , 1   , -1 ,-1   , -1 ,  2 , -1  , -1 , 1                     ) \
 	X( mknod             , CREATE    , -1 , 0   , -1 ,-1   , -1 ,  1 , -1  , -1 , 1                     ) \
 	X( mknodat           , CREATE    ,  0 , 1   , -1 ,-1   , -1 ,  2 , -1  , -1 , 1                     ) \
 	X( mount             , FORBIDDEN , -1 , 1   , -1 ,-1   , -1 , -1 , -1  , -1 , EBPF_SC_MAY_NO_FOLLOW ) \
@@ -38,6 +40,7 @@
 	X( readdir           , READDIR   , -1 ,-1   , -1 ,-1   ,  0 , -1 , -1  , -1 , EBPF_SC_MAY_NO_FOLLOW ) \
 	X( readlink          , READLINK  , -1 , 0   , -1 ,-1   , -1 , -1 , -1  , -1 , 1                     ) \
 	X( readlinkat        , READLINK  ,  0 , 1   , -1 ,-1   , -1 , -1 , -1  , -1 , 1                     ) \
+	X( rmdir             , PATH      , -1 , 0   , -1 ,-1   , -1 , -1 , -1  , -1 , 1                     ) \
 	X( rename            , RENAME    , -1 , 0   , -1 , 1   , -1 , -1 , -1  , -1 , 1                     ) \
 	X( renameat          , RENAME    ,  0 , 1   ,  2 , 3   , -1 , -1 , -1  , -1 , 1                     ) \
 	X( renameat2         , RENAME    ,  0 , 1   ,  2 , 3   , -1 , -1 ,  3  , -1 , 1                     ) \
@@ -61,23 +64,20 @@
 	X( unlinkat          , UNLINK    ,  0 , 1   , -1 ,-1   , -1 , -1 ,  2  , -1 , 1                     ) \
 	X( utime             , PATH      , -1 , 0   , -1 ,-1   , -1 , -1 , -1  , -1 , 0                     ) \
 	X( utimes            , PATH      , -1 , 0   , -1 ,-1   , -1 , -1 , -1  , -1 , 0                     ) \
-	X( utimensat         , PATH      ,  0 , 1   , -1 ,-1   , -1 , -1 ,  3  , -1 , EBPF_SC_MAY_NO_FOLLOW )
+	X( utimensat         , PATH      ,  0 , 1   , -1 ,-1   , -1 , -1 ,  3  , -1 , EBPF_SC_MAY_NO_FOLLOW ) \
+	X( getxattr          , PATH      , -1 , 0   , -1 ,-1   , -1 , -1 , -1  , -1 , 0                     ) \
+	X( listxattr         , PATH      , -1 , 0   , -1 ,-1   , -1 , -1 , -1  , -1 , 0                     ) \
+	X( removexattr       , PATH      , -1 , 0   , -1 ,-1   , -1 , -1 , -1  , -1 , 0                     ) \
+	X( setxattr          , PATH      , -1 , 0   , -1 ,-1   , -1 , -1 , -1  , -1 , 0                     ) \
+	X( lgetxattr         , PATH      , -1 , 0   , -1 ,-1   , -1 , -1 , -1  , -1 , 1                     ) \
+	X( llistxattr        , PATH      , -1 , 0   , -1 ,-1   , -1 , -1 , -1  , -1 , 1                     ) \
+	X( lremovexattr      , PATH      , -1 , 0   , -1 ,-1   , -1 , -1 , -1  , -1 , 1                     ) \
+	X( lsetxattr         , PATH      , -1 , 0   , -1 ,-1   , -1 , -1 , -1  , -1 , 1                     )
 // syscalls of SyscallDescr::s_tab that need no tracking with ebpf : cwd is captured when needed and io_uring are not forbidden (its operations are tracked)
 #define EBPF_UNTRACKED_SYSCALLS(X) \
 	X(fchdir           ) \
-	X(getxattr         ) \
 	X(io_uring_enter   ) \
 	X(io_uring_register) \
-	X(io_uring_setup   ) \
-	X(lgetxattr        ) \
-	X(listxattr        ) \
-	X(llistxattr       ) \
-	X(lremovexattr     ) \
-	X(lsetxattr        ) \
-	X(mkdir            ) \
-	X(mkdirat          ) \
-	X(removexattr      ) \
-	X(rmdir            ) \
-	X(setxattr         )
+	X(io_uring_setup   )
 
 #endif

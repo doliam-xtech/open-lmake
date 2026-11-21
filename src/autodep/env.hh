@@ -46,7 +46,6 @@ struct AutodepEnv : RealPathEnv {
 	bool operator+ (         ) const { return +service ; }
 	template<IsStream S> void serdes(S& s) {
 		/**/                        ::serdes(s,static_cast<RealPathEnv&>(self)) ;
-		/**/                        ::serdes(s,auto_mkdir                     ) ;
 		/**/                        ::serdes(s,deps_in_system                 ) ;
 		/**/                        ::serdes(s,ext_read_ok,ext_write_ok       ) ;
 		/**/                        ::serdes(s,ignore_stat                    ) ;
@@ -68,7 +67,6 @@ struct AutodepEnv : RealPathEnv {
 	ClientSockFd slow_report_fd () const ;
 	// data
 	// START_OF_VERSIONING CACHE REPO JOB
-	bool                             auto_mkdir       = false ;                   // if true  <=> auto mkdir in case of chdir
 	bool                             deps_in_system   = false ;                   // if false <=> system files are simple and not considered as deps
 	bool                             ext_read_ok      = false ;                   // if true  <=> allow reading outside repo and source dirs
 	bool                             ext_write_ok     = false ;                   // if true  <=> allow writing outside repo

@@ -29,7 +29,6 @@ def no_nl(s) :
 
 class Job :
 
-	auto_mkdir        = False
 	chroot_dir        = None
 	chroot_user       = None
 	codecs            = None
@@ -143,7 +142,6 @@ class Job :
 		simple = True
 		res    = ''
 		if True                   :          res =         res+mk_shell_str(autodep)
-		if self.auto_mkdir        : simple , res = False , res+ ' -a'
 		if self.chroot_dir        : simple , res = False , res+f' -c{mk_shell_str(     self.chroot_dir            )}'
 		if self.chroot_user       :          res =         res+f' -C{mk_shell_str(     self.chroot_user           )}'
 		if self.cwd               : simple , res = False , res+f' -d{mk_shell_str(     self.cwd                   )}'

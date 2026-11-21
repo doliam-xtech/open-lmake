@@ -137,7 +137,6 @@ Show various info about a job, as it last ran (unless stated otherwise):
 	Bullet B_(tmp_view)           : the name under which the tmp dir was seen by job.
 	Bullet B_(views)              : the view map as specified in the I_(views) rule attribute.
 	Bullet B_(sub_repo)           : the sub-repo in which rule was defined.
-	Bullet B_(auto_mkdir)         : true if C_(chdir,2) to a non-existent triggered an automatic C_(mkdir,2) for the C_(chdir,2) to succeed.
 	Bullet B_(autodep)            : the autodep method used.
 	bullet B_(backend)            : the backend used to launch job.
 	bullet B_(check_abs_paths)    : true if absolute paths inside the repo are checked (generate and error if found in targets).

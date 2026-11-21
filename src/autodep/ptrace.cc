@@ -70,6 +70,7 @@ namespace {
 			off_t        target = off_t(args[0])                                             ;
 			EbpfMagicReq req    ;
 			ssize_t      cnt    = ::pread( proc_mem , &req , sizeof(EbpfMagicReq) , target ) ; if (cnt!=sizeof(EbpfMagicReq)) return false ;
+			/**/                                                                               if (req.magic!=EBPF_MAGIC_VAL) return false ;
 			switch (req.proc) { //!                                                      done
 				case EBPF_MAGIC_DISABLE : SWEAR(!_disabled) ; _disabled = true  ; return true ;
 				case EBPF_MAGIC_ENABLE  : SWEAR( _disabled) ; _disabled = false ; return true ;

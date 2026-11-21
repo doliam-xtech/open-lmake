@@ -83,13 +83,12 @@ namespace Codec {
 
 }
 
-void AutodepEnv::operator>>(::string& os) const {                                         // START_OF_NO_COV
+void AutodepEnv::operator>>(::string& os) const {                                       // START_OF_NO_COV
 	/**/                   os << "AutodepEnv("<<static_cast<RealPathEnv const&>(self) ;
 	if (+fast_mail       ) os << ','<<fast_mail                                       ;
 	if (+fast_report_pipe) os << ','<<fast_report_pipe                                ;
 	/**/                   os << ','<<service                                         ;
 	if (+fqdn            ) os << ','<<fqdn                                            ;
-	if ( auto_mkdir      ) os << ",auto_mkdir"                                        ;
 	if ( ext_read_ok     ) os << ",external_read_ok"                                  ;
 	if ( ext_write_ok    ) os << ",external_write_ok"                                 ;
 	if ( mount_chroot_ok ) os << ",mount_chroot_ok"                                   ;
@@ -99,7 +98,7 @@ void AutodepEnv::operator>>(::string& os) const {                               
 	if (+codecs          ) os << ','<<codecs                                          ;
 	if (+views_s         ) os << ','<<views_s                                         ;
 	/**/                   os << ')'                                                  ;
-}                                                                                         // END_OF_NO_COV
+}                                                                                       // END_OF_NO_COV
 
 AutodepEnv::AutodepEnv( ::string const& env ) {
 	if (!env) {
@@ -127,7 +126,6 @@ AutodepEnv::AutodepEnv( ::string const& env ) {
 			case 'D' : readdir_ok      = true ; break ;
 			case 'i' : ignore_stat     = true ; break ;
 			case 'I' : io_uring_ok     = true ; break ;
-			case 'm' : auto_mkdir      = true ; break ;
 			case 'M' : mount_chroot_ok = true ; break ;
 			case 'W' : ext_write_ok    = true ; break ;
 			case 'x' : deps_in_system  = true ; break ;
@@ -185,7 +183,6 @@ AutodepEnv::operator ::string() const {
 	res <<':'<< '"'<<mk_printable<'"'>(fast_report_pipe)<<'"' ;
 	// options
 	res << ':' ;
-	if (auto_mkdir     ) res << 'm' ;
 	if (readdir_ok     ) res << 'D' ;
 	if (ignore_stat    ) res << 'i' ;
 	if (io_uring_ok    ) res << 'I' ;

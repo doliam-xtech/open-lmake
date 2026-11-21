@@ -232,11 +232,10 @@ public :
 							::string f     = phys_s[i] + substr_view(file_,view_s.size())                     ;
 							FileInfo fi    = !last||+a ? FileInfo({repo_root_fd,f}) : FileInfo(FileTag::None) ;
 							bool     found = fi.exists() || !read                                             ; // if not reading, assume file_ is found in upper
-							fl = ade.file_loc(f) ;                                                              // use f before ::move
+							::tie(f,fl) = ade.file_loc(f) ;                                                     // use f before ::move
 							if (store) {
-								if      (last ) { real  = f ; file_loc  = fl ; }
-								else if (found) { real  = f ; file_loc  = fl ; }
-								else if (i==0 ) { real0 = f ; file_loc0 = fl ; }                                // real0 is only significative when not equal to real
+								if      ( found || last ) { real  = f ; file_loc  = fl ; }
+								else if ( i==0          ) { real0 = f ; file_loc0 = fl ; }                      // real0 is only significative when not equal to real
 							}
 							if      (last ) { if (+a) r.report_access( fl , {.comment=c,.comment_exts=ces|exts,.digest={.accesses=a             } , .files={{::move(f),fi}} } ) ; return ; }
 							else if (found) {         r.report_access( fl , {.comment=c,.comment_exts=ces|exts,.digest={.accesses=a|Access::Stat} , .files={{::move(f),fi}} } ) ; return ; }

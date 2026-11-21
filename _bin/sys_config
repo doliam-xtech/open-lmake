@@ -606,9 +606,9 @@ gather_ebpf_info() {
 			return o==nullptr || rb==nullptr ;
 		}
 	EOF
-			$BPFTOOL btf dump file /sys/kernel/btf/vmlinux format c >vmlinux.h 2>/dev/null                                                   \
-		&&	$EBPF_CLANG -g -O3 -target bpf -DTARGET_ARCH_$(uname -m) -I. -I$EBPF_INC_DIR -c -o has_ebpf.bpf.o has_ebpf.bpf.c >/dev/null 2>&1 \
-		&&	cc -std=$CXX_STD -o /dev/null has_ebpf.cc -lbpf                                                                                  \
+			$BPFTOOL btf dump file /sys/kernel/btf/vmlinux format c >vmlinux.h 2>/dev/null                                                                   \
+		&&	$EBPF_CLANG -g -O3 -target bpf -fms-extensions -DTARGET_ARCH_$(uname -m) -I. -I$EBPF_INC_DIR -c -o has_ebpf.bpf.o has_ebpf.bpf.c >/dev/null 2>&1 \
+		&&	cc -std=$CXX_STD -o /dev/null has_ebpf.cc -lbpf                                                                                                  \
 	||	{ echo cannot compile trial ebpf >>$ERR_FILE ; return 1 ; }
 	case $LMAKE_FLAGS in
 		*E* ) ;;

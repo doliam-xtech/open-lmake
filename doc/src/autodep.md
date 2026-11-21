@@ -64,7 +64,6 @@ so accesses are reliably known although they are processed asynchronously.
 Files that can be neither deps nor targets (the vast majority, such as those lying in `/usr`) are filtered out in the kernel, which makes this method fast.
 
 This is a non-intrusive approach : the job is not modified in any way and all accesses are seen, including those from statically linked programs and those done through `io_uring`.
-As accesses are observed and not intercepted, features that need to act before a system call executes are not supported (`auto_mkdir`).
 
 The major drawback is linked to security : installing a eBPF filter requires to be privileged, which implies the presence of a root daemon (`_bin/lmake_ebpfd`) that jobs connect to.
 At start-up, this daemon checks that the kernel hooks it relies on are operational, and refuses to run if they are not.

@@ -242,24 +242,9 @@ This means:</p>
 </li>
 </ul>
 <h2 id="attributes"><a class="header" href="#attributes">Attributes</a></h2>
-<h3 id="auto_mkdir"><a class="header" href="#auto_mkdir"><a href="unit_tests/chdir.html#:~:text=auto%5Fmkdir%20%3D%20step%3D%3D2"><code>auto_mkdir</code></a></a></h3>
-<div class="table-wrapper"><table><thead><tr><th>Inheritance</th><th>Type</th><th>Default</th><th>Dynamic</th><th>Example</th></tr></thead><tbody>
-<tr><td>python</td><td><code>bool</code></td><td><code>False</code></td><td>Full</td><td><code>True</code></td></tr>
-</tbody></table>
-</div>
-<p>When this attribute has a true value, executing a <code>chdir</code> syscall (e.g. executing <code>cd</code> in bash) will create the target dir if it does not exist.</p>
-<p>This is useful for scripts in situations such as:</p>
-<ul>
-<li>The script does <code>chdir a</code>.</li>
-<li>Then try to read file <code>b</code> from there.</li>
-<li>What is expected is to have a dep on <code>a/b</code> which may not exist initially but will be created by some other job.</li>
-<li>However, if dir <code>a</code> does not exist, the <code>chdir</code> call fails and the file which is open for reading is <code>b</code> instead of <code>a/b</code>.</li>
-<li>As a consequence, no dep is set for <code>a/b</code> and the problem will not be resolved by a further re-execution.</li>
-<li>Setting this attribute to true creates dir <code>a</code> on the fly when <code>chdir</code> is called so that it succeeds and the correct dep is set.</li>
-</ul>
 <h3 id="autodep"><a class="header" href="#autodep"><a href="unit_tests/ptrace.html#:~:text=autodep%20%3D%20%27ptrace"><code>autodep</code></a></a></h3>
 <div class="table-wrapper"><table><thead><tr><th>Inheritance</th><th>Type</th><th>Default</th><th>Dynamic</th><th>Example</th></tr></thead><tbody>
-<tr><td>python</td><td><code>f-str</code></td><td><code>'ld_audit'</code> if supported else <code>'ld_preload'</code></td><td>Full</td><td><code>'ptrace'</code></td></tr>
+<tr><td>python</td><td><code>f-str</code></td><td>first supported in <code>'ebpf'</code>, <code>'ld_audit'</code> or <code>'ld_preload'</code></td><td>Full</td><td><code>'ptrace'</code></td></tr>
 </tbody></table>
 </div>
 <p>This attribute specifies the method used by <a href="autodep.html">autodep</a> to discover hidden deps.</p>

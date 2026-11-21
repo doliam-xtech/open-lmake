@@ -102,6 +102,7 @@ namespace {
 			off_t        target = off_t(args[0])                                                  ;
 			EbpfMagicReq req    ;
 			ssize_t      cnt    = ::pread( info.proc_mem , &req , sizeof(EbpfMagicReq) , target ) ; if (cnt!=sizeof(EbpfMagicReq)) return false ;
+			/**/                                                                                    if (req.magic!=EBPF_MAGIC_VAL) return false ;
 			switch (req.proc) { //!                                                                                            done
 				case EBPF_MAGIC_DISABLE : { bool inserted = disabled_tids.insert(info.tid).second ; SWEAR(inserted) ; } return true ;
 				case EBPF_MAGIC_ENABLE  : { bool erased   = disabled_tids.erase (info.tid)>0      ; SWEAR(erased  ) ; } return true ;

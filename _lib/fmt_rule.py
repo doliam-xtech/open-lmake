@@ -27,7 +27,6 @@ repo_root_s  = repo_root +'/'
 # helper constants
 StdAttrs = { #!               type   dynamic
 	'autodep'             : ( str   , True  )
-,	'auto_mkdir'          : ( bool  , True  )
 ,	'backend'             : ( str   , True  )
 ,	'cache'               : ( str   , True  )
 ,	'check_abs_paths'     : ( bool  , True  )
@@ -529,7 +528,6 @@ class Handle :
 		if self.attrs.is_python : interpreter = 'python'
 		else                    : interpreter = 'shell'
 		self._init()
-		self._handle_val( 'auto_mkdir'                            )
 		self._handle_val( 'chroot_dir'                            )
 		self._handle_val( 'env'             , rep_key='environ'   )
 		self._handle_val( 'interpreter'     , rep_key=interpreter )

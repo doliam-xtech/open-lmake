@@ -38,7 +38,6 @@
 
 // START_OF_VERSIONING REPO CACHE
 // PER_AUTODEP_METHOD : add entry here
-// >=Ld means a lib is pre-loaded
 // by default, use a compromize between speed an reliability
 // ensure encoding is independent of compilation flags
 enum class AutodepMethod : uint8_t {
@@ -62,14 +61,18 @@ enum class AutodepMethod : uint8_t {
 		, SeccompNotAvail
 	#endif
 // aliases
-#if HAS_EBPF
-	,	DfltLd = LdPreload // XXX> : change to Ebpf when reliable
-#elif HAS_LD_AUDIT
-	,	DfltLd = LdAudit   // default value while ensuring it is of ld-based kind
-#else
-	,	DfltLd = LdPreload // .
-#endif
-,	Dflt = DfltLd          // default value, may be any method
+	#if HAS_LD_AUDIT
+		,	Makefile = LdAudit   // value used to read makefiles
+	#else
+		,	Makefile = LdPreload
+	#endif
+	#if HAS_EBPF
+		,	Dflt = Ebpf
+	#elif HAS_LD_AUDIT
+		,	Dflt = LdAudit
+	#else
+		,	Dflt = LdPreload
+	#endif
 } ;
 // END_OF_VERSIONING
 
@@ -774,8 +777,8 @@ template<class Key=::string> struct JobDigest {                            // Ke
 } ;
 template<class Key> void JobDigest<Key>::chk(bool for_cache) const {
 	if constexpr (::is_same_v<Key,::string>) {
-		for( auto const& [t,_] : targets ) throw_unless( +t && !Disk::is_abs(t) && Disk::is_canon(t,{.extern_ok=false,.dot_ok=true}) , "bad target" ) ;
-		for( auto const& [d,_] : deps    ) throw_unless( +d &&                     Disk::is_canon(d                                ) , "bad dep"    ) ;
+		for( auto const& [t,_] : targets ) throw_unless( +t && !Disk::is_abs(t) && Disk::is_canon(t,{.extern_ok=false,.dot_ok=true}) , "bad target : ",t ) ;
+		for( auto const& [d,_] : deps    ) throw_unless( +d &&                     Disk::is_canon(d                                ) , "bad dep : "   ,d ) ;
 	}
 	throw_unless( status<All<Status> , "bad status" ) ;
 	if (for_cache)

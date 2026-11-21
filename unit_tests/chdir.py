@@ -8,12 +8,7 @@ if __name__!='__main__' :
 	import lmake
 	from lmake.rules import Rule
 
-	lmake.manifest = (
-		'Lmakefile.py'
-	,	'step.py'
-	)
-
-	from step import step
+	lmake.manifest = ('Lmakefile.py',)
 
 	class NewDep(Rule) :
 		target = r'new_dir/dep{Digit:\d}'
@@ -21,9 +16,9 @@ if __name__!='__main__' :
 
 	class Chdir(Rule) :
 		target     = r'chdir{Digit:\d}'
-		auto_mkdir = step==2
 		shell      = Rule.shell + ('-e',)
 		cmd = '''
+			mkdir -p new_dir
 			cd new_dir
 			cat dep{Digit}
 		'''
@@ -32,8 +27,4 @@ else :
 
 	import ut
 
-	print('step=1',file=open('step.py','w'))
-	ut.lmake( 'chdir1' , failed=1 , rc=1 )
-
-	print('step=2',file=open('step.py','w'))
-	ut.lmake( 'chdir1' , done=2 , may_rerun=1 )
+	ut.lmake( 'chdir1' , may_rerun=1 , done=2 )

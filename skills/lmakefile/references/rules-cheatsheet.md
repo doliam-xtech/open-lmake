@@ -45,7 +45,6 @@ list/dict splices the inherited value (e.g. extend `$PATH`-like lists).
 | `environ` / `environ_resources` / `environ_ancillary` | Job env. Command-like (rerun on change) / resource-like (rerun only failed) / untracked. User env is otherwise ignored. |
 | `autodep` | Spy method: `'ld_audit'` (default) / `'ld_preload'` / `'ptrace'` / `'seccomp'` (kernel-dependent) / `'none'`. `lmake.autodeps` lists what's available. Change only when the default demonstrably fails (static binaries, rust, wine...). |
 | `readdir_ok` | Allow reading directories inside the repo. Deliberate opt-out of tracking — see good-practices. |
-| `auto_mkdir` | Auto-create dirs on chdir-to-nonexistent (legacy flows). |
 | `stderr_ok` | Non-empty stderr is not an error. |
 | `max_stderr_len` | Truncate reported stderr. |
 | `timeout` | Kill job after N seconds. |

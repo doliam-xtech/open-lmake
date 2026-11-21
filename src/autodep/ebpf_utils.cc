@@ -38,9 +38,9 @@ void vlog( bool with_errno , bool with_nl , const char* fmt , va_list ap ) {
 	/**/              i += ::vsnprintf( buf+i , N-i , fmt                     ,ap                             ) ; if (i>=N) return ;
 	if (with_errno) { i += ::snprintf ( buf+i , N-i , " : %s"                 ,::strerror(en)                 ) ; if (i>=N) return ; }
 	if (with_nl   ) { i += ::snprintf ( buf+i , N-i , "\n"                                                    ) ; if (i>=N) return ; }
-	::write( g_log_fd , buf , i ) ;
+	ssize_t cnt = ::write( g_log_fd , buf , i ) ; (void)cnt ;
 }
 
 void reset_log() {
-	::ftruncate( g_log_fd , 0/*length*/ ) ;
+	int rc = ::ftruncate( g_log_fd , 0/*length*/ ) ; (void)rc ;
 }

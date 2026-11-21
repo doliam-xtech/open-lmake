@@ -1,15 +1,15 @@
 #include "version.hh"
 namespace Version {
-	uint64_t    constexpr Cache = 65      ; // 51c0c6b0b451b661280bfdb237975d25
+	uint64_t    constexpr Cache = 66      ; // cbd58de04ad39e8176999142d55afe4d
 	uint64_t    constexpr Codec = 3       ; // 14f6466440812eb056085e97f4b8bcb7
-	uint64_t    constexpr Repo  = 70      ; // 1e4f50b7fc829498e44e806260a4baa8
-	uint64_t    constexpr Job   = 37      ; // a918f883af798fa52565a32500aa68ca
+	uint64_t    constexpr Repo  = 71      ; // cdfbf3b89f13528e19563ea445c4a209
+	uint64_t    constexpr Job   = 38      ; // 4f8ba48ca6a250dbddb2de06ac7e96c9
 	const char* const     Major = "26.11" ;
 	uint64_t    constexpr Tag   = 0       ;
 }
 
 // ********************************************
-// * Cache : 51c0c6b0b451b661280bfdb237975d25 *
+// * Cache : cbd58de04ad39e8176999142d55afe4d *
 // ********************************************
 //
 //	// START_OF_VERSIONING CACHE
@@ -155,7 +155,6 @@ namespace Version {
 //		}
 //		// END_OF_VERSIONING
 //		// START_OF_VERSIONING CACHE REPO JOB
-//		bool                             auto_mkdir       = false ;                   // if true  <=> auto mkdir in case of chdir
 //		bool                             deps_in_system   = false ;                   // if false <=> system files are simple and not considered as deps
 //		bool                             ext_read_ok      = false ;                   // if true  <=> allow reading outside repo and source dirs
 //		bool                             ext_write_ok     = false ;                   // if true  <=> allow writing outside repo
@@ -387,7 +386,6 @@ namespace Version {
 //	// END_OF_VERSIONING
 //	// START_OF_VERSIONING REPO CACHE
 //	// PER_AUTODEP_METHOD : add entry here
-//	// >=Ld means a lib is pre-loaded
 //	// by default, use a compromize between speed an reliability
 //	// ensure encoding is independent of compilation flags
 //	enum class AutodepMethod : uint8_t {
@@ -411,14 +409,18 @@ namespace Version {
 //			, SeccompNotAvail
 //		#endif
 //	// aliases
-//	#if HAS_EBPF
-//		,	DfltLd = LdPreload // XXX> : change to Ebpf when reliable
-//	#elif HAS_LD_AUDIT
-//		,	DfltLd = LdAudit   // default value while ensuring it is of ld-based kind
-//	#else
-//		,	DfltLd = LdPreload // .
-//	#endif
-//	,	Dflt = DfltLd          // default value, may be any method
+//		#if HAS_LD_AUDIT
+//			,	Makefile = LdAudit   // value used to read makefiles
+//		#else
+//			,	Makefile = LdPreload
+//		#endif
+//		#if HAS_EBPF
+//			,	Dflt = Ebpf
+//		#elif HAS_LD_AUDIT
+//			,	Dflt = LdAudit
+//		#else
+//			,	Dflt = LdPreload
+//		#endif
 //	} ;
 //	// END_OF_VERSIONING
 //	// START_OF_VERSIONING REPO CACHE
@@ -1218,7 +1220,7 @@ namespace Version {
 //		// END_OF_VERSIONING
 
 // *******************************************
-// * Repo : 1e4f50b7fc829498e44e806260a4baa8 *
+// * Repo : cdfbf3b89f13528e19563ea445c4a209 *
 // *******************************************
 //
 //	// START_OF_VERSIONING CACHE REPO
@@ -1424,7 +1426,6 @@ namespace Version {
 //		}
 //		// END_OF_VERSIONING
 //		// START_OF_VERSIONING CACHE REPO JOB
-//		bool                             auto_mkdir       = false ;                   // if true  <=> auto mkdir in case of chdir
 //		bool                             deps_in_system   = false ;                   // if false <=> system files are simple and not considered as deps
 //		bool                             ext_read_ok      = false ;                   // if true  <=> allow reading outside repo and source dirs
 //		bool                             ext_write_ok     = false ;                   // if true  <=> allow writing outside repo
@@ -1747,7 +1748,6 @@ namespace Version {
 //			// END_OF_VERSIONING
 //			// START_OF_VERSIONING REPO
 //			::string   chroot_dir_s    ;         bool        dyn_chroot_dir_s    = false ;
-//			bool       auto_mkdir      = false ; bool        dyn_auto_mkdir      = false ;
 //			::vmap_ss  env             ;         IsDynMap    dyn_env             = {}    ;
 //			bool       ignore_stat     = false ; bool        dyn_ignore_stat     = false ;
 //			::vector_s interpreter     ;         IsDynVector dyn_interpreter     = {}    ;
@@ -2030,7 +2030,6 @@ namespace Version {
 //	// END_OF_VERSIONING
 //	// START_OF_VERSIONING REPO CACHE
 //	// PER_AUTODEP_METHOD : add entry here
-//	// >=Ld means a lib is pre-loaded
 //	// by default, use a compromize between speed an reliability
 //	// ensure encoding is independent of compilation flags
 //	enum class AutodepMethod : uint8_t {
@@ -2054,14 +2053,18 @@ namespace Version {
 //			, SeccompNotAvail
 //		#endif
 //	// aliases
-//	#if HAS_EBPF
-//		,	DfltLd = LdPreload // XXX> : change to Ebpf when reliable
-//	#elif HAS_LD_AUDIT
-//		,	DfltLd = LdAudit   // default value while ensuring it is of ld-based kind
-//	#else
-//		,	DfltLd = LdPreload // .
-//	#endif
-//	,	Dflt = DfltLd          // default value, may be any method
+//		#if HAS_LD_AUDIT
+//			,	Makefile = LdAudit   // value used to read makefiles
+//		#else
+//			,	Makefile = LdPreload
+//		#endif
+//		#if HAS_EBPF
+//			,	Dflt = Ebpf
+//		#elif HAS_LD_AUDIT
+//			,	Dflt = LdAudit
+//		#else
+//			,	Dflt = LdPreload
+//		#endif
 //	} ;
 //	// END_OF_VERSIONING
 //	// START_OF_VERSIONING REPO CACHE
@@ -2708,7 +2711,7 @@ namespace Version {
 //	// END_OF_VERSIONING
 
 // ******************************************
-// * Job : a918f883af798fa52565a32500aa68ca *
+// * Job : 4f8ba48ca6a250dbddb2de06ac7e96c9 *
 // ******************************************
 //
 //	// START_OF_VERSIONING CACHE JOB REPO
@@ -2804,7 +2807,6 @@ namespace Version {
 //		}
 //		// END_OF_VERSIONING
 //		// START_OF_VERSIONING CACHE REPO JOB
-//		bool                             auto_mkdir       = false ;                   // if true  <=> auto mkdir in case of chdir
 //		bool                             deps_in_system   = false ;                   // if false <=> system files are simple and not considered as deps
 //		bool                             ext_read_ok      = false ;                   // if true  <=> allow reading outside repo and source dirs
 //		bool                             ext_write_ok     = false ;                   // if true  <=> allow writing outside repo

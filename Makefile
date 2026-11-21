@@ -13,6 +13,8 @@ ifneq ($(shell uname),Linux)
     $(error can only compile under Linux)
 endif
 
+SUDO := SUDO_ASKPASS=/usr/bin/ssh-askpass sudo -A
+
 # mandatory
 MAKEFLAGS := -r -R                                                      # dont use default rules
 # user configurable
@@ -81,7 +83,7 @@ $(shell cat sys_config.env      >&2 )
 $(shell echo '*'                >&2 )
 $(shell echo '* error :'        >&2 )
 $(shell echo '*'                >&2 )
-$(shell cat sys_config.err >&2 )
+$(shell cat sys_config.err      >&2 )
 $(error )
 endif
 
@@ -514,7 +516,7 @@ src/autodep/ebpf.bpf.o : src/autodep/ebpf.bpf.c src/autodep/ebpf_event.h src/aut
 	@$(EBPF_CLANG) -g -O3 -Werror -target bpf -DTARGET_ARCH_$$(uname -m) -iquote . -iquote src/autodep -I $(EBPF_INC_DIR) -c -o $@ $<
 src/autodep/ebpf.bpf.i : src/autodep/ebpf.bpf.c src/autodep/ebpf_event.h src/autodep/vmlinux.h
 	@echo $(EBPF_CLANG) -target bpf to $@
-	@$(EBPF_CLANG) -Werror -DTARGET_ARCH_$$(uname -m) -iquote . -iquote src/autodep -I $(EBPF_INC_DIR) -E -o $@ $<
+	@$(EBPF_CLANG) -Werror -fms-extensions -DTARGET_ARCH_$$(uname -m) -iquote . -iquote src/autodep -I $(EBPF_INC_DIR) -E -o $@ $<
 src/autodep/ebpf.skel.h : src/autodep/ebpf.bpf.o
 	@echo generate skeleton to $@
 	@$(BPFTOOL) gen skeleton $< name ebpf >$@
@@ -524,8 +526,8 @@ _bin/lmake_ebpfd : src/autodep/ebpf_client.o src/autodep/ebpf_utils.o src/autode
 	@echo link to $@
 	@$(LINK) -o $@ $^ $(EBPF_LIB)
 	@$(SPLIT_DBG_CMD)
-	@sudo chown root:root $@
-	@sudo chmod ug+s      $@
+	@$(SUDO) -p 'make $@ suid root' chown root:root $@
+	@$(SUDO) -p 'make $@ suid root' chmod ug+s      $@
 endif
 
 %.d : %.cc
@@ -953,14 +955,14 @@ lmake_env/tok : $(LMAKE_ALL_FILES) lmake_env/stamp lmake_env/Lmakefile.py
 #
 
 DOCKER : $(DOCKER_FILES)
-	@for df in $^ ; do                            \
-		d=$${df%.docker}                        ; \
-		d=$${d##*/}                             ; \
-		echo                                    ; \
-		echo '*'                                ; \
-		echo '*' build docker $$d from $$df     ; \
-		echo '*'                                ; \
-		sudo docker build -f $$df -t $$d docker ; \
+	@for df in $^ ; do                                                     \
+		d=$${df%.docker}                                                 ; \
+		d=$${d##*/}                                                      ; \
+		echo                                                             ; \
+		echo '*'                                                         ; \
+		echo '*' build docker $$d from $$df                              ; \
+		echo '*'                                                         ; \
+		$(SUDO) -p "docker build $$d" docker build -f $$df -t $$d docker ; \
 	done
 
 #
@@ -1040,8 +1042,8 @@ EXAMPLE_FILES := $(filter examples/%,$(SRCS))
 
 # Install debian packages needed to build open-lmake package
 DEBIAN_DEPS :
-	sudo -k apt install dh-make devscripts debhelper equivs
-	sudo -k mk-build-deps --install debian/control
+	$(SUDO) -p 'install open-lmake dependencies' -k apt install dh-make devscripts debhelper equivs
+	$(SUDO) -p 'install open-lmake dependencies' -k mk-build-deps --install debian/control
 
 #
 # /!\ these rules are necessary for debian packaging to work, they are not primarily made to be executed by user

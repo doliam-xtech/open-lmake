@@ -498,7 +498,6 @@ namespace Engine {
 		::string res = "script = gen_script(\n" ;
 		//
 		/**/                                        res <<  "\tautodep_method     = "<<mk_py_str(snake   (jsrr.method                                         ))<<'\n' ;
-		if (ade.auto_mkdir                        ) res << ",\tauto_mkdir         = "<<mk_py_str(         ade.auto_mkdir                                       )<<'\n' ;
 		if (+jsrr.chroot_info.dir_s               ) res << ",\tchroot_dir         = "<<mk_py_str(no_slash(jsrr.chroot_info.dir_s                              ))<<'\n' ;
 		if (+jsrr.chroot_info.actions             ) res << ",\tchroot_actions     = "<<mk_py_str(cat     (jsrr.chroot_info.actions                            ))<<'\n' ;
 		/**/                                        res << ",\tdebug_dir          = "<<mk_py_str(no_slash(dbg_dir_s                                           ))<<'\n' ;
@@ -1046,7 +1045,6 @@ namespace Engine {
 								if ( start.kill_daemons               ) push_entry( "kill_daemons"    , "true"                                 ) ;
 								if ( start.autodep_env.io_uring_ok    ) push_entry( "io_uring_ok"     , "true"                                 ) ;
 								if ( start.autodep_env.readdir_ok     ) push_entry( "readdir_ok"      , "true"                                 ) ;
-								if ( start.autodep_env.auto_mkdir     ) push_entry( "auto_mkdir"      , "true"                                 ) ;
 								/**/                                    push_entry( "autodep"         , snake_str(start.method)                ) ;
 								if (+start.timeout                    ) push_entry( "timeout"         , start.timeout.short_str()              ) ;
 								if ( start.use_script                 ) push_entry( "use_script"      , "true"                                 ) ;

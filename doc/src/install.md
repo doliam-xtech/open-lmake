@@ -107,6 +107,33 @@ Installing system-wide with Debian package will take care of placing both binari
 
 This will simplify the user experience but is not required.
 
+# EBPF (experimental)
+
+The installation of the ebpf daemon is somewhat delicate as it is required to be suid-root in the top-level namespace.
+Also, it is rather sensitive to kernel variations.
+
+The major consequences are:
+- at compilation time, a password may be asked to make `_bin/lmake_ebpfd` suid-root
+- open-lmake must be installed on a local disk
+	- alternatively, `lmake_ebpfd` may be copied to a local disk and a symbolic link may replace the original file in `<install_dir>/_bin/lmake_ebpfd` to point to it
+- at run-time, jobs must be launched on physical hosts or vm's, but not in a contenerized environment such as a docker image
+- at run-time, whenever the daemon is started, it runs an auto-test to ensure the hooks in the ebpf filter are correctly attached inside the kernel
+
+In order to accept to make `lmake_ebpfd` suid-root, the user doing the installation may want to audit it.
+To that purpose, the daemon has been written so as to be as simple as possible to audit.
+The points to verify are:
+- the daemon (`src/autodep/ebpf_daemon.cc`) does nothing else than installing the ebpf filter (`src/autodep/ebpf.bpf.c`) and connect incoming jobs to it
+- the ebpf filter observes nothing on jobs that are not connected to it from the daemon
+	- it does intercept all syscalls, but the very first instruction is to exit when not from a tracked process
+- the ebpf filter may send a `SIGSTOP` signal to controlled processes, you may want to verify that it cannot stop any non-tracked process
+- note that beyond sending signals, ebpf filters have basically no possbility to otherwise modify the system behavior
+
+The ebpf daemon starts and ends automatically on demand.
+Because the start-up time is about a few seconds, it is only stoopped after a few minutes of inactivity.
+The purpose is to ensure that there is no performance alteration at all when the host is busy at tasks totally unrelated to open-lmake.
+
+Alternatively, it is possible to start the daemon from systemctl. It must then be executed as `lmake_ebpfd daemon`.
+
 # AppArmor
 
 AppArmor tuning is currently only known to be required on Ubuntu starting at 24.04.
@@ -151,4 +178,4 @@ In that case, do the following for each such command (here, `hostname`) :
 Because of its unique features (auto-dep, views, ...), open-lmake is necessarily tighly coupled to the underlying OS.
 In particular, it was not possible to write it solely on top of Posix.
 
-There are no known road blocks to port it to other OSes (such as Darwin or Windows) although this would require an in depth knowledge of these systems.
+There are no known road blocks to port it to other OSes (such as Darwin or Windows) although this requires an in depth knowledge of these systems.

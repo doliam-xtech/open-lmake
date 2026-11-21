@@ -804,7 +804,6 @@ namespace Engine {
 			::optional_s n   ;
 			const char*  k   ;
 			#define EB(...) entries.emplace_back(__VA_ARGS__)
-			k="auto_mkdir"          ; if (scad&&sca.dyn_auto_mkdir       ) EB(k,n) ; else if ( sca.auto_mkdir                ) EB(k,cat        (sca.auto_mkdir             )) ;
 			k="autodep"             ; if (srad&&sra.dyn_method           ) EB(k,n) ; else                                      EB(k,snake      (sra.method                 )) ;
 			k="backend"             ; if (urad&&ura.dyn_backend          ) EB(k,n) ; else if ( ura.backend!=BackendTag::Local) EB(k,snake      (ura.backend                )) ;
 			k="timeout"             ; if (urad&&ura.dyn_timeout          ) EB(k,n) ; else if (+ura.timeout                   ) EB(k,            ura.timeout.short_str()     ) ;

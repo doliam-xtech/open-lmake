@@ -194,8 +194,7 @@ A special implementation has been devised to handle this case, but is too fragil
 <p>Everything is captured in the kernel when the access occurs (the resolved path, the state of the file before it is modified, the traversed symbolic links),
 so accesses are reliably known although they are processed asynchronously.
 Files that can be neither deps nor targets (the vast majority, such as those lying in <code>/usr</code>) are filtered out in the kernel, which makes this method fast.</p>
-<p>This is a non-intrusive approach : the job is not modified in any way and all accesses are seen, including those from statically linked programs and those done through <code>io_uring</code>.
-As accesses are observed and not intercepted, features that need to act before a system call executes are not supported (<code>auto_mkdir</code>).</p>
+<p>This is a non-intrusive approach : the job is not modified in any way and all accesses are seen, including those from statically linked programs and those done through <code>io_uring</code>.</p>
 <p>The major drawback is linked to security : installing a eBPF filter requires to be privileged, which implies the presence of a root daemon (<code>_bin/lmake_ebpfd</code>) that jobs connect to.
 At start-up, this daemon checks that the kernel hooks it relies on are operational, and refuses to run if they are not.</p>
 <h3 id="ptrace"><a class="header" href="#ptrace">ptrace</a></h3>
