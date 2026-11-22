@@ -928,9 +928,8 @@ int BPF_PROG( on_sys_exit , struct pt_regs* regs , long ret ) {
 					ev->hdr.flags |= EBPF_F_DEP_STAT ;                                                               // sensitive to file existence (i.e. must not pre-exist)
 				} break ;
 				case EBPF_SC_UNLINK :
-					if ( get_arg(args,arg_flgs,0/*dflt*/) & AT_REMOVEDIR ) goto Nop ;
-					else                                                   ev->hdr.kind = EBPF_UNLINK ;
-					ev->hdr.flags |= EBPF_F_DEP_STAT ;
+					if ( get_arg(args,arg_flgs,0/*dflt*/) & AT_REMOVEDIR )   ev->hdr.kind = EBPF_READ   ;
+					else                                                   { ev->hdr.kind = EBPF_UNLINK ; ev->hdr.flags |= EBPF_F_DEP_STAT ; }
 				break ;
 				default : _panic(tv,"bad syscall kind" ) ; return 0 ;                                                // defensive
 			}
@@ -959,6 +958,28 @@ Nop :
 // args are laid out as for the equivalent syscall
 //
 
+typedef struct {
+    uint32_t key             ;
+	bool     active          ;
+	bool     no_follow       ;
+	uint     flags           ;
+	int      dfd1            ;
+	int      dfd2            ;
+    char     path1[PATH_MAX] ;
+    char     path2[PATH_MAX] ;
+} IoCtx ;
+struct {
+	__uint( type        , BPF_MAP_TYPE_PERCPU_ARRAY ) ;
+	__uint( max_entries , 1                         ) ;
+	__type( key         , uint32_t                  ) ;
+	__type( value       , IoCtx                     ) ;
+} io_ctxs SEC(".maps") ;
+static __always_inline IoCtx* get_io_ctx(Task* tv) {
+    uint32_t i = 0 ;
+    IoCtx* ctx = bpf_map_lookup_elem( &io_ctxs, &i ) ; if (!ctx) return 0 ;
+	return ctx ;
+}
+
 static __always_inline Task* _capturing_io( struct task_struct* t , int ret ) {
 	Task* tv = _capturing1(t) ; if (!tv) return 0 ;
 	if (_is_retry(ret)) {                           // request will be re-issued (typically from a worker)
@@ -978,17 +999,19 @@ int handle_submit_req() {
 	return 0 ;
 }
 
-struct delayed_filename___v {
+// /!\ in kernels>=7.0, filename is no longer available at fexit time, so we must record it at fentry time
+
+struct delayed_filename___v70 {
 	struct filename* __incomplete_filename ;
 } __attribute__((preserve_access_index)) ;
 
 #define MK_ACCESS( io_typ , sfx , field ) \
-struct io_typ##___old##sfx { struct filename*            field ; } __attribute__((preserve_access_index)) ;                                                              \
-struct io_typ##___new##sfx { struct delayed_filename___v field ; } __attribute__((preserve_access_index)) ;                                                              \
+struct io_typ##___old##sfx { struct filename*              field ; } __attribute__((preserve_access_index)) ;                                                            \
+struct io_typ##___v70##sfx { struct delayed_filename___v70 field ; } __attribute__((preserve_access_index)) ;                                                            \
 static __always_inline const char* io_get_path_##io_typ##sfx(struct io_typ* req) {                                                                                       \
-	if      (HAS_FIELD(io_typ##___new##sfx,field.__incomplete_filename)) return BPF_CORE_READ( (struct io_typ##___new##sfx*)req , field.__incomplete_filename , name ) ; \
+	if      (HAS_FIELD(io_typ##___v70##sfx,field.__incomplete_filename)) return BPF_CORE_READ( (struct io_typ##___v70##sfx*)req , field.__incomplete_filename , name ) ; \
 	else if (HAS_FIELD(io_typ##___old##sfx,field                      )) return BPF_CORE_READ( (struct io_typ##___old##sfx*)req , field                       , name ) ; \
-	else                                                            return 0                                                                                           ; \
+	else                                                                 return 0                                                                                      ; \
 }
 
 MK_ACCESS( io_mkdir  ,      , filename )
@@ -1002,57 +1025,86 @@ MK_ACCESS( io_link   , _new , newpath  )
 MK_ACCESS( io_rename , _old , oldpath  )
 MK_ACCESS( io_rename , _new , newpath  )
 
-#define _IO_DO1( io_name , io_typ , kind_expr , flags_expr , dfd_expr , no_follow_expr , active_expr ) \
-	SEC( "fexit/"#io_name )                                                               \
-	int BPF_PROG( on_##io_name , struct io_kiocb* req_ , uint flags , int ret ) {         \
-		struct task_struct* t      = bpf_get_current_task_btf() ;                         \
-		Task              * tv     = _capturing_io(t,ret)       ; if (!tv    ) return 0 ; \
-		EbpfEvent         * ev     = &tv->ev                    ;                         \
-		struct io_typ     * req    = (struct io_typ*)(req_+0)   ;                         \
-		bool                active = active_expr                ; if (!active) return 0 ; \
-		int                 dfd    = dfd_expr                   ;                         \
-		const char*         path   = io_get_path_##io_typ(req)  ;                         \
-		/**/                                                                              \
-		/**/                ev->hdr.kind   = kind_expr        ;                           \
-		/**/                ev->hdr.flags |= flags_expr       ;                           \
-		if (no_follow_expr) ev->hdr.flags |= EBPF_F_NO_FOLLOW ;                           \
-		if (_is_ok(ret)   ) ev->hdr.flags |= EBPF_F_OK        ;                           \
-		_emit_user( t , tv , dfd,path , true/*kernel*/ , ret ) ;                          \
-		return 0 ;                                                                        \
+#define _IO_DO1( io_name , io_typ , kind_expr , active_flags_expr , inactive_flags_expr , dfd_expr , no_follow_expr , active_expr ) \
+	SEC( "fentry/"#io_name )                                                                                                      \
+	int BPF_PROG( on_##io_name##_entry , struct io_kiocb* req_ ) {                                                                \
+		Task         * tv                = _capturing2()                                                ; if (!tv    ) return 0 ; \
+		struct io_typ* req               = (struct io_typ*)(req_+0)                                     ;                         \
+		IoCtx        * io_ctx            = get_io_ctx(tv)                                               ; if (!io_ctx) return 0 ; \
+		/**/           io_ctx->active    = active_expr                                                  ;                         \
+		/**/           io_ctx->dfd1      = dfd_expr                                                     ;                         \
+		/**/           io_ctx->no_follow = no_follow_expr                                               ;                         \
+		const char*    path              = io_get_path_##io_typ(req)                                    ;                         \
+		int            n1                = bpf_probe_read_kernel_str( io_ctx->path1 , PATH_MAX , path ) ; if (n1<=0  ) return 0 ; \
+		/**/           io_ctx->key       = tv->ev.hdr.key                                               ;                         \
+		return 0 ;                                                                                                                \
+	}                                                                                                                             \
+	SEC( "fexit/"#io_name )                                                                                                       \
+	int BPF_PROG( on_##io_name##_exit , struct io_kiocb* req_ , uint issue_flags , int ret ) {                                    \
+		struct task_struct* t      = bpf_get_current_task_btf() ;                                                                 \
+		Task              * tv     = _capturing_io(t,ret)       ; if (!tv                     ) return 0 ;                        \
+		EbpfEvent         * ev     = &tv->ev                    ;                                                                 \
+		IoCtx             * io_ctx = get_io_ctx(tv)             ; if (!io_ctx                 ) return 0 ;                        \
+		/**/                                                      if (io_ctx->key!=ev->hdr.key) return 0 ;                        \
+		/**/                                                                                                                      \
+		/**/                ev->hdr.kind      = io_ctx->active ? kind_expr         : EBPF_READ           ;                        \
+		/**/                ev->hdr.flags    |= io_ctx->active ? active_flags_expr : inactive_flags_expr ;                        \
+		if (io_ctx->no_follow) ev->hdr.flags |= EBPF_F_NO_FOLLOW                                         ;                        \
+		if (_is_ok(ret)   ) ev->hdr.flags    |= EBPF_F_OK                                                ;                        \
+		_emit_user( t , tv , io_ctx->dfd1,io_ctx->path1 , true/*kernel*/ , ret ) ;                                                \
+		io_ctx->key = 0 ;                                                                                                         \
+		return 0 ;                                                                                                                \
 	}
-#define IO_DO_AT1(io_name,io_typ,kind_expr,flags_expr,dfd_field,no_follow_expr,active_expr) _IO_DO1(io_name,io_typ,kind_expr,flags_expr,BPF_CORE_READ(req,dfd_field),no_follow_expr,active_expr)
-#define IO_DO1(   io_name,io_typ,kind_expr,flags_expr,          no_follow_expr,active_expr) _IO_DO1(io_name,io_typ,kind_expr,flags_expr,AT_FDCWD                    ,no_follow_expr,active_expr)
+#define IO_DO_AT1( io_name , io_typ , kind_expr , active_flags_expr , inactive_flags_expr , dfd_field , no_follow_expr , active_expr ) \
+	_IO_DO1( io_name , io_typ , kind_expr , active_flags_expr , inactive_flags_expr , BPF_CORE_READ(req,dfd_field) , no_follow_expr , active_expr )
+#define IO_DO1( io_name , io_typ , kind_expr , active_flags_expr , inactive_flags_expr , no_follow_expr , active_expr ) \
+	_IO_DO1( io_name , io_typ , kind_expr , active_flags_expr , inactive_flags_expr , AT_FDCWD , no_follow_expr , active_expr )
 
 #define IO_DO2( io_name , io_typ , is_rename ) \
-	SEC( "fexit/"#io_name )                                                        \
-	int BPF_PROG( on_##io_name , struct io_kiocb* req_ , uint flags , int ret ) {  \
-		struct task_struct* t   = bpf_get_current_task_btf() ;                     \
-		Task              * tv  = _capturing_io(t,ret)       ; if (!tv) return 0 ; \
-		struct io_typ     * req = (struct io_typ*)(req_+0)   ;                     \
-		_process_2_files(                                                          \
-			t , tv                                                                 \
-		,	is_rename                                                              \
-		,	BPF_CORE_READ(req,old_dfd) , io_get_path_##io_typ##_old(req)           \
-		,	BPF_CORE_READ(req,new_dfd) , io_get_path_##io_typ##_new(req)           \
-		,	true/*kernel*/                                                         \
-		,	flags                                                                  \
-		,	ret                                                                    \
-		) ;                                                                        \
-		return 0 ;                                                                 \
+	SEC( "fentry/"#io_name )                                                                                                   \
+	int BPF_PROG( on_##io_name##_entry , struct io_kiocb* req_ ) {                                                             \
+		Task         * tv            = _capturing2()                                                 ; if (!tv    ) return 0 ; \
+		struct io_typ* req           = (struct io_typ*)(req_+0)                                      ;                         \
+		IoCtx        * io_ctx        = get_io_ctx(tv)                                                ; if (!io_ctx) return 0 ; \
+		/**/           io_ctx->flags = BPF_CORE_READ(req,flags  )                                    ;                         \
+		/**/           io_ctx->dfd1  = BPF_CORE_READ(req,old_dfd)                                    ;                         \
+		/**/           io_ctx->dfd2  = BPF_CORE_READ(req,new_dfd)                                    ;                         \
+		const char*    path1         = io_get_path_##io_typ##_old(req)                               ;                         \
+		const char*    path2         = io_get_path_##io_typ##_new(req)                               ;                         \
+		int            n1            = bpf_probe_read_kernel_str( io_ctx->path1 , PATH_MAX , path1 ) ; if (n1<=0  ) return 0 ; \
+		/**/           n1            = bpf_probe_read_kernel_str( io_ctx->path2 , PATH_MAX , path2 ) ; if (n1<=0  ) return 0 ; \
+		/**/           io_ctx->key   = tv->ev.hdr.key                                                ;                         \
+		return 0 ;                                                                                                             \
+	}                                                                                                                          \
+	SEC( "fexit/"#io_name )                                                                                                    \
+	int BPF_PROG( on_##io_name##_exit , struct io_kiocb* req_ , uint issue_flags , int ret ) {                                 \
+		struct task_struct* t      = bpf_get_current_task_btf() ;                                                              \
+		Task              * tv     = _capturing_io(t,ret)       ; if (!tv                        ) return 0 ;                  \
+		IoCtx             * io_ctx = get_io_ctx(tv)             ; if (!io_ctx                    ) return 0 ;                  \
+		/**/                                                      if (io_ctx->key!=tv->ev.hdr.key) return 0 ;                  \
+		_process_2_files(                                                                                                      \
+			t , tv                                                                                                             \
+		,	is_rename                                                                                                          \
+		,	io_ctx->dfd1 , io_ctx->path1                                                                                       \
+		,	io_ctx->dfd2 , io_ctx->path2                                                                                       \
+		,	true/*kernel*/                                                                                                     \
+		,	io_ctx->flags                                                                                                      \
+		,	ret                                                                                                                \
+		) ;                                                                                                                    \
+		io_ctx->key = 0 ;                                                                                                      \
+		return 0 ;                                                                                                             \
 	}
 
-// XXX : support kernel 7.0 /!\ as in new kernels, filename may have disappeared when fexit is reached (field __incomplete_filename is not longer valid)
-
 // XXX : manage conditional presence of faccessat
-//           io_name         io_typ      kind_expr     flags_expr       dfd_field  no_follow_expr                                 active_expr
-//IO_DO_AT1( io_faccessat  , ???       , EBPF_READ   , EBPF_F_DEP_ALL  , dfd     , false                                        , _access_is_read(BPF_CORE_READ(req,mod )) )
-//IO_DO_AT1( io_faccessat2 , ???       , EBPF_READ   , EBPF_F_DEP_ALL  , dfd     , BPF_CORE_READ(req,flags)&AT_SYMLINK_NOFOLLOW , _access_is_read(BPF_CORE_READ(req,mod )) )
-IO_DO_AT1  ( io_mkdirat    , io_mkdir  , EBPF_NOP    , 0               , dfd     , true                                         , true                                     )
-IO_DO_AT1  ( io_statx      , io_statx  , EBPF_READ   , EBPF_F_DEP_ALL  , dfd     , BPF_CORE_READ(req,flags)&AT_SYMLINK_NOFOLLOW , _statx_is_read (BPF_CORE_READ(req,mask)) )
-IO_DO_AT1  ( io_symlinkat  , io_link   , EBPF_WRITE  , EBPF_F_DEP_STAT , new_dfd , true                                         , true                                     )
-IO_DO_AT1  ( io_unlinkat   , io_unlink , EBPF_UNLINK , EBPF_F_DEP_STAT , dfd     , true                                         , !(BPF_CORE_READ(req,flags)&AT_REMOVEDIR) )
-IO_DO1     ( io_getxattr   , io_xattr  , EBPF_NOP    , 0               ,           true                                         , true                                     )
-IO_DO1     ( io_setxattr   , io_xattr  , EBPF_NOP    , 0               ,           true                                         , true                                     )
+//           io_name         io_typ      kind_expr    active_flags_expr inactive_flags_expr dfd_field  no_follow_expr                                 active_expr
+//IO_DO_AT1( io_faccessat  , ???       , EBPF_READ   , EBPF_F_DEP_ALL  , EBPF_F_DEP_STAT   , dfd     , false                                        , _access_is_read(BPF_CORE_READ(req,mod )) )
+//IO_DO_AT1( io_faccessat2 , ???       , EBPF_READ   , EBPF_F_DEP_ALL  , EBPF_F_DEP_STAT   , dfd     , BPF_CORE_READ(req,flags)&AT_SYMLINK_NOFOLLOW , _access_is_read(BPF_CORE_READ(req,mod )) )
+IO_DO_AT1  ( io_mkdirat    , io_mkdir  , EBPF_NOP    , 0               , 0                 , dfd     , true                                         , true                                     )
+IO_DO_AT1  ( io_statx      , io_statx  , EBPF_READ   , EBPF_F_DEP_ALL  , EBPF_F_DEP_STAT   , dfd     , BPF_CORE_READ(req,flags)&AT_SYMLINK_NOFOLLOW , _statx_is_read (BPF_CORE_READ(req,mask)) )
+IO_DO_AT1  ( io_symlinkat  , io_link   , EBPF_WRITE  , EBPF_F_DEP_STAT , 0                 , new_dfd , true                                         , true                                     )
+IO_DO_AT1  ( io_unlinkat   , io_unlink , EBPF_UNLINK , EBPF_F_DEP_STAT , 0                 , dfd     , true                                         , !(BPF_CORE_READ(req,flags)&AT_REMOVEDIR) )
+IO_DO1     ( io_getxattr   , io_xattr  , EBPF_NOP    , 0               , 0                 ,           true                                         , true                                     )
+IO_DO1     ( io_setxattr   , io_xattr  , EBPF_NOP    , 0               , 0                 ,           true                                         , true                                     )
 
 //      io_name       io_type   is_rename
 IO_DO2( io_linkat   , io_link   , false )
