@@ -237,7 +237,7 @@ RealPath::SolveReport RealPath::solve( FileView file , bool no_follow ) {
 ::vmap_s<Accesses> RealPath::exec(SolveReport&& sr) {
 	::vmap_s<Accesses> res ;
 	// from tmp, we can go back to repo
-	for( int i=0 ; i<=4 ; i++ ) {                                                                          // interpret #!<interpreter> recursively (4 levels as per man execve)
+	for( int i=0 ; i<=5 ; i++ ) {                                                                          // interpret #!<interpreter> recursively (4 levels as per man execve, but observed 5)
 		for( ::string& l : sr.lnks ) res.emplace_back(::move(l),Accesses(Access::Lnk)) ;
 		//
 		if ( sr.file_loc>FileLoc::Dep && sr.file_loc!=FileLoc::Tmp ) break ;                               // if we escaped from the repo, there is no more deps to gather

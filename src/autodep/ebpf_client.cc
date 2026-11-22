@@ -92,10 +92,11 @@ namespace EbpfDaemon {
 	void RingBufBase::init() {
 		if (_registered) return ;
 		EbpfMagicReq req ;
-		req.magic  = EBPF_MAGIC_VAL      ; // compulsery for req to be recognized
-		req.proc   = EBPF_MAGIC_REGISTER ;
-		req.mrkr   = g_mrkr              ;
-		req.job_id = job_id              ;
+		req.magic                = EBPF_MAGIC_VAL      ; // compulsery for req to be recognized
+		req.proc                 = EBPF_MAGIC_REGISTER ;
+		req.register_.mrkr       = g_mrkr              ;
+		req.register_.job_id     = job_id              ;
+		req.register_.readdir_ok = readdir_ok          ;
 		_magic_req(req) ;
 		s_add_root( EBPF_ROOT_ID_PROC , "/proc" ) ;
 		_registered = true ;
@@ -130,15 +131,15 @@ namespace EbpfDaemon {
 			if (root.back()=='/') return s_add_root( root_id , root.substr(0,root.size()-1) ) ;
 		}
 		EbpfMagicReq req ;
-		req.magic   = EBPF_MAGIC_VAL  ;                                // compulsery for req to be recognized
-		req.proc    = EBPF_MAGIC_ROOT ;
-		req.root_id = root_id         ;
-		for( ::string d=root ;; d=d.substr(0,d.rfind('/')) ) {         // super-dir of root dirs must be registered as well
-			req.fd = ::open( d.empty()?"/":d.c_str() , O_DIRECTORY ) ; // dont close to maintain its dentry live in kernel
+		req.magic        = EBPF_MAGIC_VAL  ;                                // compulsery for req to be recognized
+		req.proc         = EBPF_MAGIC_ROOT ;
+		req.root.root_id = root_id         ;
+		for( ::string d=root ;; d=d.substr(0,d.rfind('/')) ) {              // super-dir of root dirs must be registered as well
+			req.root.fd = ::open( d.empty()?"/":d.c_str() , O_DIRECTORY ) ; // dont close to maintain its dentry live in kernel
 			_magic_req( req , d ) ;
 			if ( root_id!=EBPF_ROOT_ID_SUPER && root_id<EBPF_ROOT_ID_PLAIN ) break ;
 			if ( d.empty()                                                 ) break ;
-			req.root_id = EBPF_ROOT_ID_SUPER ;
+			req.root.root_id = EBPF_ROOT_ID_SUPER ;
 		}
 	}
 

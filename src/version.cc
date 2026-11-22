@@ -1,15 +1,15 @@
 #include "version.hh"
 namespace Version {
-	uint64_t    constexpr Cache = 66      ; // cbd58de04ad39e8176999142d55afe4d
+	uint64_t    constexpr Cache = 67      ; // c11aa225466d468615e24705d717b210
 	uint64_t    constexpr Codec = 3       ; // 14f6466440812eb056085e97f4b8bcb7
-	uint64_t    constexpr Repo  = 71      ; // cdfbf3b89f13528e19563ea445c4a209
-	uint64_t    constexpr Job   = 38      ; // 4f8ba48ca6a250dbddb2de06ac7e96c9
+	uint64_t    constexpr Repo  = 72      ; // 44b485a7191b07de4e08de973fe8a98b
+	uint64_t    constexpr Job   = 39      ; // afb483aeb5822d93e10926e1cb0634aa
 	const char* const     Major = "26.11" ;
 	uint64_t    constexpr Tag   = 0       ;
 }
 
 // ********************************************
-// * Cache : cbd58de04ad39e8176999142d55afe4d *
+// * Cache : c11aa225466d468615e24705d717b210 *
 // ********************************************
 //
 //	// START_OF_VERSIONING CACHE
@@ -919,9 +919,9 @@ namespace Version {
 //	,	Direct
 //	,	Err
 //	,	File
+//	,	Killed
 //	,	Last
 //	,	LdLibraryPath
-//	,	Killed
 //	,	Link     // not Lnk as name is seen by user
 //	,	NoFollow
 //	,	Orig
@@ -1220,7 +1220,7 @@ namespace Version {
 //		// END_OF_VERSIONING
 
 // *******************************************
-// * Repo : cdfbf3b89f13528e19563ea445c4a209 *
+// * Repo : 44b485a7191b07de4e08de973fe8a98b *
 // *******************************************
 //
 //	// START_OF_VERSIONING CACHE REPO
@@ -2563,9 +2563,9 @@ namespace Version {
 //	,	Direct
 //	,	Err
 //	,	File
+//	,	Killed
 //	,	Last
 //	,	LdLibraryPath
-//	,	Killed
 //	,	Link     // not Lnk as name is seen by user
 //	,	NoFollow
 //	,	Orig
@@ -2711,7 +2711,7 @@ namespace Version {
 //	// END_OF_VERSIONING
 
 // ******************************************
-// * Job : 4f8ba48ca6a250dbddb2de06ac7e96c9 *
+// * Job : afb483aeb5822d93e10926e1cb0634aa *
 // ******************************************
 //
 //	// START_OF_VERSIONING CACHE JOB REPO
@@ -3069,9 +3069,9 @@ namespace Version {
 //	,	Direct
 //	,	Err
 //	,	File
+//	,	Killed
 //	,	Last
 //	,	LdLibraryPath
-//	,	Killed
 //	,	Link     // not Lnk as name is seen by user
 //	,	NoFollow
 //	,	Orig

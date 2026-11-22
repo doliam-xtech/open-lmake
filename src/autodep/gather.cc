@@ -144,16 +144,16 @@ void Gather::new_access( Fd fd , PD pd , ::string&& file , AccessDigest ad , DI 
 	info.update( pd , ad , di ) ;
 	//^^^^^^^^^^^^^^^^^^^^^^^^^
 	if ( is_new || info!=old_info ) {
-		if (+c) _user_trace( pd , c , ces , f ) ;
+		if ( +c || +ces ) _user_trace( pd , c , ces , f ) ;
 		Trace("new_access", fd , STR(is_new) , pd , ad , di , _parallel_id , c , ces , old_info , "->" , info , f ) ; // only trace if something changes
 	}
 }
 
-void Gather::new_exec( PD pd , ::string const& exe , Comment c ) {
+void Gather::_new_exec( ::string const& exe , Comment c ) {
 	RealPath              rp { autodep_env }                    ;
 	RealPath::SolveReport sr = rp.solve(exe,false/*no_follow*/) ;
 	for( auto&& [f,a] : rp.exec(::move(sr)) )
-		if (!Record::s_is_simple(f,No|autodep_env.deps_in_system)) new_access( pd , ::move(f) , {.accesses=a} , FileInfo(f) , c ) ;
+		if (!Record::s_is_simple(f,No|autodep_env.deps_in_system)) new_access( New , ::move(f) , {.accesses=a} , FileInfo(f) , c ) ;
 }
 
 struct alignas(::hardware_destructive_interference_size) _Stat {
@@ -617,7 +617,7 @@ Retry :
 		if (env) { if (env->contains(env_var                  )) entry << ':'<<env->at(env_var) ; }
 		else     { if (has_env      (env_var,false/*empty_ok*/)) entry << ':'<<get_env(env_var) ; }
 		trace("ld",method,env_var,entry) ;
-		new_exec( New , mk_glb(cmd_line[0],autodep_env.sub_repo_s) ) ;
+		_new_exec( mk_glb(cmd_line[0],autodep_env.sub_repo_s) ) ;
 	}
 	//vvvvvvvvvvvv
 	_child.spawn() ;

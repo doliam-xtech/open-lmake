@@ -226,42 +226,51 @@ typedef enum {
 } EbpfRootIdSpecial ;
 
 typedef struct {
-	uint64_t   magic   ; // must contain EBPF_MAGIC_VAL for this request to be recognized
-	uint8_t    proc    ; // enum : EbpfMagicProc
-	uint64_t   mrkr    ; // if proc=EBPF_MAGIC_REGISTER, ensure job_exec speaks to the right filter
-	EbpfJobId  job_id  ; // if proc=EBPF_MAGIC_REGISTER
-	EbpfRootId root_id ; // if proc=EBPF_MAGIC_ROOT
-	int        fd      ; // if proc=EBPF_MAGIC_ROOT
+	uint64_t  mrkr       ;                   // ensure job_exec speaks to the right filter
+	EbpfJobId job_id     ;
+	bool      readdir_ok ;
+} EbpfMagicReqRegister ;
+typedef struct {
+	EbpfRootId root_id ;
+	int        fd      ;
+} EbpfMagicReqRoot ;
+typedef struct {
+	uint64_t magic ;                         // must contain EBPF_MAGIC_VAL for this request to be recognized
+	uint8_t  proc  ;                         // enum : EbpfMagicProc
+	union {
+		EbpfMagicReqRegister register_ ;     // if proc=EBPF_MAGIC_REGISTER
+		EbpfMagicReqRoot     root      ;     // if proc=EBPF_MAGIC_ROOT
+	} ;
 } EbpfMagicReq ;
 #define EBPF_MAGIC_VAL 0x8dd43d14b87366f0ULL // any random number
 
 typedef enum {
 	EBPF_NONE
 	// process tracking
-,	EBPF_JOB_START                // job has exited
-,	EBPF_PROC_START               // a process has been created in the job (implies EBPF_THREAD_START)
-,	EBPF_THREAD_START             // a thread  has been created in the job
-,	EBPF_THREAD_END               // a thread  has exited
-,	EBPF_PROC_END                 // a process has exited                  (implies EBPF_THREAD_EXIT )
-,	EBPF_JOB_END                  // job has exited
-,	EBPF_PANIC                    // an error occurred, reason is in data
-,	EBPF_DST                      // dest for 2-files events, sent before said event
+,	EBPF_JOB_START             // job has exited
+,	EBPF_PROC_START            // a process has been created in the job (implies EBPF_THREAD_START)
+,	EBPF_THREAD_START          // a thread  has been created in the job
+,	EBPF_THREAD_END            // a thread  has exited
+,	EBPF_PROC_END              // a process has exited                  (implies EBPF_THREAD_EXIT )
+,	EBPF_JOB_END               // job has exited
+,	EBPF_PANIC                 // an error occurred, reason is in data
+,	EBPF_DST                   // dest for 2-files events, sent before said event
 	// path resolution
-,	EBPF_PATH_RES                 // a symlink has been traversed during path resolution
+,	EBPF_PATH_RES              // a symlink has been traversed during path resolution
 	// 1-file accesses
-,	EBPF_NOP                      // a syscall that does nothing : not reported
+,	EBPF_NOP                   // a syscall that does nothing : not reported
 ,	EBPF_READ
 ,	EBPF_READDIR
-,	EBPF_UNLINK                   // may also read
-,	EBPF_WRITE                    // .
+,	EBPF_UNLINK                // may also read
+,	EBPF_WRITE                 // .
 	// 2-files accesses
-,	EBPF_LINK                     // hard link
+,	EBPF_LINK                  // hard link
 ,	EBPF_RENAME
 ,	EBPF_EXCHANGE
 	// aliases
-,	EBPF_HAS_DATA = EBPF_PANIC    // < EBPF_HAS_DATA means event has only hdr
-,	EBPF_ACCESS   = EBPF_PATH_RES // >=EBPF_ACCESS   means disk has been accessed
-,	EBPF_SYSCALL  = EBPF_NOP      // >=EBPF_SYSCALL  means a syscall or io_uring request has been executed
+,	EBPF_HAS_DATA = EBPF_PANIC // < EBPF_HAS_DATA means event has only hdr
+,	EBPF_ACCESS   = EBPF_DST   // >=EBPF_ACCESS   means disk has been accessed
+,	EBPF_SYSCALL  = EBPF_NOP   // >=EBPF_SYSCALL  means a syscall or io_uring request has been executed
 } EbpfEventKind ;
 
 typedef enum {
@@ -278,33 +287,39 @@ typedef enum {
 typedef enum {
 	EBPF_F_STOPPED = 1<<0                                          // thread was stopped and must be continued by userland after analysis
 	// only for accesses
-,	EBPF_F_NO_FOLLOW = 1<<1                                        // only for EBPF_FILE_UNKNOWN, trailing symlink is not followed
-,	EBPF_F_DEP_LNK   = 1<<2                                        // access dep as readlink
-,	EBPF_F_DEP_REG   = 1<<3                                        // access dep as open
-,	EBPF_F_DEP_STAT  = 1<<4                                        // sense dep existence
-,	EBPF_F_OK        = 1<<5
-,	EBPF_F_SEEN_PROC = 1<<6                                        // a symlink has been followed in /proc, care must be taken in case it is /proc/self or /proc/thread-self
-,	EBPF_F_SEEN_LNK  = 1<<7                                        // a symlink has been followed during path resolution
-,	EBPF_F_CANON     = 1<<8                                        // file is canonic
+,	EBPF_F_32        = 1<<1                                        // syscall is from 32-bit exe
+,	EBPF_F_CANON     = 1<<2                                        // file is canonic
+,	EBPF_F_DEP_LNK   = 1<<3                                        // access dep as readlink
+,	EBPF_F_DEP_REG   = 1<<4                                        // access dep as open
+,	EBPF_F_DEP_STAT  = 1<<5                                        // sense dep existence
+,	EBPF_F_NO_FOLLOW = 1<<6                                        // only for EBPF_FILE_UNKNOWN, trailing symlink is not followed
+,	EBPF_F_OK        = 1<<7
+,	EBPF_F_SEEN_LNK  = 1<<8                                        // a symlink has been followed during path resolution
+,	EBPF_F_SEEN_PROC = 1<<9                                        // a symlink has been followed in /proc, care must be taken in case it is /proc/self or /proc/thread-self
 	// aliases
 ,	EBPF_F_DEP_ALL = EBPF_F_DEP_LNK|EBPF_F_DEP_REG|EBPF_F_DEP_STAT // access all aspects of dep, such as with stat
 } EbpfFlag ;
 
+typedef struct {
+	pid_t pid ;                              // pid in current namespace
+	pid_t tid ;                              // tid in current namespace
+} EbpfEventHdrStart ;
+typedef struct {
+	uint64_t stamp_ns ;
+	uint64_t size     ;                      // file size
+	uint64_t mtime_ns ;                      // st_mtime*10^9+st_mtime_ns before access
+} EbpfEventHdrAccess ;
 typedef struct {
 	uint32_t   key       ;                   // thread id in the top-level namespace, only used as a key to identify all the streams
 	EbpfRootId root_id   ;
 	EbpfFlags  flags     ;
 	uint8_t    kind      ;                   // enum : EbpfKind
 	uint8_t    file_kind ;                   // enum : EbpfFileKind
+	uint16_t   syscall   ;                   // syscall number (16 bits is more than enough), should be in access but layout would be less efficient
 	union {
-		uint64_t stamp_ns ;
-		pid_t    pid      ;                 // pid in current namespace, if kind=EBPF_START*
+		EbpfEventHdrStart  start  ;          // if kind=EBPF_START*
+		EbpfEventHdrAccess access ;          // if kind>=EBPF_ACCESS
 	} ;
-	union {
-		uint64_t size ;                 // file size
-		pid_t    tid  ;                 // tid in current namespace, if kind=EBPF_START*
-	} ;
-	uint64_t mtime_ns ;                      // st_mtime*10^9+st_mtime_ns before access
 } EbpfEventHdr ;
 typedef struct {
 	EbpfEventHdr hdr                       ;
@@ -319,7 +334,8 @@ static inline bool _open_do_write (int flags) { return !(flags&O_PATH     ) && (
 
 // only necessary on ebpf side, but must be published as skeleton will refer it
 typedef struct {
-	volatile bool overflow ; // true if an event could not be reported
+	volatile bool overflow   ; // true if an event could not be reported
+	bool          readdir_ok ;
 } JobInfo ;
 
 #endif

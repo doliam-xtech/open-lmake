@@ -23,6 +23,7 @@
 #include "disk.hh"
 #include "process.hh"
 #include "time.hh"
+#include "rpc_job_common.hh"
 
 #include "record.hh"
 #include "syscall_tab.hh"
@@ -30,6 +31,7 @@
 
 #include "ebpf_client.hh"
 #include "ebpf_event.h"
+#include "syscall_tab.h"
 
 #include "ebpf.hh"
 
@@ -41,22 +43,35 @@ using namespace Disk       ;
 using namespace Time       ;
 using namespace EbpfDaemon ;
 
+static constexpr ::array<::array<Comment,SyscallDescr::NSyscalls>,1+HAS_32> CommentTab = []() {
+	::array<::array<Comment,SyscallDescr::NSyscalls>,1+HAS_32> tab = {} ;
+	#define X(  name,kind,d1,p1,d2,p2,mod,flags,msk,nf) if ( long nr=MACRO_VAL(SYS_##name  ,-1L) ; nr>=0 ) tab[0][nr] = Comment::name ;
+	#define X32(name,kind,d1,p1,d2,p2,mod,flags,msk,nf) if ( long nr=MACRO_VAL(SYS32_##name,-1L) ; nr>=0 ) tab[1][nr] = Comment::name ;
+	EBPF_TRACKED_SYSCALLS(X)
+	#if HAS_32
+		EBPF_TRACKED_SYSCALLS(X32)
+	#endif
+	#undef X
+	#undef X32
+	return tab ;
+}() ;
+
 static Pdate _now(EbpfEventHdr const& hdr) {
-	if (hdr.stamp_ns) return Pdate( New , hdr.stamp_ns ) ;
-	else              return        New                  ;
+	if (hdr.access.stamp_ns) return Pdate( New , hdr.access.stamp_ns ) ;
+	else                     return        New                         ;
 } ;
 
 FileInfo AutodepEbpf::Consumer::_mk_info( EbpfEventHdr const& hdr , ::string const& file ) {
 	FileTag tag ;
 	switch (hdr.file_kind) {
-		case EBPF_FILE_UNKNOWN :                                                  return {file} ; // XXX : ensure file is a dep or we arrive too late (file may have changed since it was accessed)
-		case EBPF_FILE_NO_FILE : tag = FileTag::None                            ; break         ;
-		case EBPF_FILE_DIR     : tag = FileTag::Dir                             ; break         ;
-		case EBPF_FILE_LNK     : tag = FileTag::Lnk                             ; break         ;
-		case EBPF_FILE_REG     : tag = hdr.size ? FileTag::Reg : FileTag::Empty ; break         ;
-		case EBPF_FILE_EXE     : tag = FileTag::Exe                             ; break         ;
+		case EBPF_FILE_UNKNOWN : return {file} ;                                                 // XXX : ensure file is a dep or we arrive too late (file may have changed since it was accessed)
+		case EBPF_FILE_NO_FILE : tag = FileTag::None                                   ; break ;
+		case EBPF_FILE_DIR     : tag = FileTag::Dir                                    ; break ;
+		case EBPF_FILE_LNK     : tag = FileTag::Lnk                                    ; break ;
+		case EBPF_FILE_REG     : tag = hdr.access.size ? FileTag::Reg : FileTag::Empty ; break ;
+		case EBPF_FILE_EXE     : tag = FileTag::Exe                                    ; break ;
 	DF}
-	return { hdr.size , {New,hdr.mtime_ns,tag} } ;
+	return { hdr.access.size , {New,hdr.access.mtime_ns,tag} } ;
 }
 
 ::pair_s<bool/*in_repo*/> AutodepEbpf::Consumer::_mk_real( ThreadCtx const& ctx , EbpfEventHdr const& hdr , Path const& path ) {
@@ -117,9 +132,11 @@ void AutodepEbpf::Consumer::handle_event( ThreadCtx const& ctx , EbpfEventHdr co
 	SWEAR( hdr.kind>=EBPF_HAS_DATA , hdr.kind ) ;
 	throw_if( hdr.kind==EBPF_PANIC , path.path ) ;
 	//
-	::pair_s<bool/*in_repo*/> real_lcl = _mk_real( ctx , hdr , path           ) ; if (!real_lcl.first) return ;
-	FileInfo                  fi       = _mk_info(       hdr , real_lcl.first ) ;
+	::pair_s<bool/*in_repo*/> real_lcl = _mk_real( ctx , hdr , path           )             ; if (!real_lcl.first) return ;
+	FileInfo                  fi       = _mk_info(       hdr , real_lcl.first )             ;
 	AccessDigest              ad       ;
+	Comment                   c        = CommentTab[bool(hdr.flags&EBPF_F_32)][hdr.syscall] ;
+	CommentExts               ces      ;
 	if (real_lcl.second) {
 		switch (hdr.kind) {
 			case EBPF_RENAME   :
@@ -135,16 +152,21 @@ void AutodepEbpf::Consumer::handle_event( ThreadCtx const& ctx , EbpfEventHdr co
 				case EBPF_UNLINK   : ad.write = Yes ; break ;
 			DN}
 	}
-	if (hdr.kind==EBPF_READDIR  ) ad.read_dir = true ;
+	switch (hdr.kind) {
+		case EBPF_PATH_RES : ces         |= CommentExt::Link ; break ;
+		case EBPF_READDIR  : ad.read_dir  = true             ; break ;
+		default : ;
+	}
+	if (hdr.flags&EBPF_F_NO_FOLLOW) ces |= CommentExt::NoFollow ;
 	if (hdr.flags&EBPF_F_DEP_ALL) {
 		if (  hdr.flags&EBPF_F_DEP_LNK   ) ad.accesses |= Access::Lnk  ;
 		if (  hdr.flags&EBPF_F_DEP_REG   ) ad.accesses |= Access::Reg  ;
 		if (  hdr.flags&EBPF_F_DEP_STAT  ) ad.accesses |= Access::Stat ;
 		if (!(hdr.flags&EBPF_F_NO_FOLLOW)) ad.accesses |= Access::Lnk  ; // we must follow link if it is one
 	} else {
-		ad.accesses |= Access::Lnk ; // for path resolution, if no_follow, file is actually the dir of the actually accessed file
+		ad.accesses |= Access::Lnk ;                                     // for path resolution, if no_follow, file is actually the dir of the actually accessed file
 	}
-	_gather->new_access( _now(hdr) , ::move(real_lcl.first) , ad , _mk_info(hdr) , Yes/*late*/ ) ;
+	_gather->new_access( _now(hdr) , ::move(real_lcl.first) , ad , _mk_info(hdr) , Yes/*late*/ , c , ces ) ;
 }
 
 // runs in the child, just before execve
@@ -172,10 +194,11 @@ void AutodepEbpf::init(Gather& gather) {
 	}
 	throw "cannot connect to nor launch daemon"s ;
 Connected :
+	AutodepEnv const& ade = Record::s_autodep_env() ;
+	//
+	ring_buf.readdir_ok = ade.readdir_ok ;
 	ring_buf.init() ;
 	ring_buf.consumer.init(gather) ;
-	//
-	AutodepEnv const& ade = Record::s_autodep_env() ;
 	/**/                                          RingBufBase::s_add_root(  EBPF_ROOT_ID_REPO      , ade.repo_root_s                           ) ;
 	/**/                                          RingBufBase::s_add_root(  EBPF_ROOT_ID_EXTERN    , ade.repo_root_s+PrivateAdminDirS          ) ;
 	/**/                                          RingBufBase::s_add_root(  EBPF_ROOT_ID_EXTERN    , ade.tmp_dir_s                             ) ;

@@ -4,7 +4,7 @@
 // This program is distributed WITHOUT ANY WARRANTY, without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
 #include <linux/seccomp.h>
-#include <syscall.h>       // for SYS_* macros
+#include <sys/syscall.h>   // for SYS_* macros
 #ifdef SYS_openat2
 	#include <linux/openat2.h>
 #endif
@@ -213,7 +213,7 @@ template<bool At> [[maybe_unused]] static ::pair<void* /*ctx*/,bool/*refresh*/> 
 		//
 		MknodHelper& m = *new MknodHelper{ .mknod{r,_path<At>(proc_mem,args+0),c} , .mode=mode_t(args[At+1]) , .dev=dev_t(args[At+2]) } ;
 		if (m.mknod.confirm_id) return { &m , false/*refresh*/ } ;
-		else                    delete &m ;                                                  // nothing to do on exit
+		else                    delete &m ;                                                                          // nothing to do on exit
 	} catch (::string const&) {}
 	return {} ;
 }
@@ -234,7 +234,7 @@ template<bool At> [[maybe_unused]] static ::pair<void* /*ctx*/,bool/*refresh*/> 
 }
 [[maybe_unused]] static int64_t/*rc*/ _exit_mount( void* ctx , Record& r , Fd /*proc_mem*/ , ::optional<int64_t> rc ) {
 	return _do_exit<Record::Mount>( ctx , rc
-	,	[ ](Record::Mount&             )->int64_t { FAIL() ;  }                                                                           // cannot emulate mount
+	,	[ ](Record::Mount&             )->int64_t { FAIL() ;  }                                                                        // cannot emulate mount
 	,	[&](Record::Mount& m,int64_t rc)          { m(r,rc) ; }
 	) ;
 }
@@ -392,7 +392,7 @@ template<bool At,int FlagArg> [[maybe_unused]] static ::pair<void* /*ctx*/,bool/
 		//
 		Record::Mknod& u = *new Record::Mknod{ r , _path<At>(proc_mem,args+0) , c } ;
 		if (u.confirm_id) return { &u , false/*refresh*/ } ;
-		else              delete &u ;                                                  // nothing to do on exit
+		else              delete &u ;                        // nothing to do on exit
 	} catch (::string const&) {}
 	return {} ;
 }
@@ -416,10 +416,10 @@ template<bool At,int FlagArg> [[maybe_unused]] static ::pair<void* /*ctx*/,bool/
 	#if defined(STATX_TYPE) && defined(STATX_SIZE) && defined(STATX_BLOCKS) && defined(STATX_MODE)
 		uint     msk = args[3] ;
 		Accesses a   ;
-		if      (msk&(STATX_TYPE|STATX_SIZE|STATX_BLOCKS)) a = FullAccesses ; // user can distinguish all content
-		else if (msk& STATX_MODE                         ) a = Access::Reg  ; // user can distinguish executable files, which is part of crc for regular files
+		if      (msk&(STATX_TYPE|STATX_SIZE|STATX_BLOCKS)) a = FullAccesses ;                            // user can distinguish all content
+		else if (msk& STATX_MODE                         ) a = Access::Reg  ;                            // user can distinguish executable files, which is part of crc for regular files
 	#else
-		Accesses a = FullAccesses ;                                           // if access macros are not defined, be pessimistic
+		Accesses a = FullAccesses ;                                                                      // if access macros are not defined, be pessimistic
 	#endif
 	return _do_stat<true,2>(r,proc_mem,args,a,c) ;
 }

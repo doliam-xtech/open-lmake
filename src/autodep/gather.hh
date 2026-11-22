@@ -143,13 +143,12 @@ private :
 	void _new_accesses( Fd fd , Jerr&& jerr ) {
 		for( auto& [f,fi] : jerr.files ) new_access( fd , jerr.date , ::move(f) , jerr.digest , fi , Yes/*late*/, jerr.comment , jerr.comment_exts ) ;
 	}
+	void _new_exec( ::string const& exe , Comment=Comment::StaticExec ) ;
 public :
 	// Fd for trace purpose only
-	void new_access( Fd , PD    , ::string&& file , AccessDigest    , DI const&    , Bool3 late , Comment  =Comment::None , CommentExts    ={} ) ; //!        Fd                    late
-	void new_access(      PD pd , ::string&& f    , AccessDigest ad , DI const& di , Bool3 l    , Comment c=Comment::None , CommentExts ces={} ) { new_access({},pd,::move(f),ad,di,l    ,c,ces) ; }
-	void new_access(      PD pd , ::string&& f    , AccessDigest ad , DI const& di ,              Comment c=Comment::None , CommentExts ces={} ) { new_access({},pd,::move(f),ad,di,Maybe,c,ces) ; }
-	//
-	void new_exec  ( PD , ::string const& exe , Comment=Comment::StaticExec ) ;
+	void new_access( Fd , PD    , ::string&& file , AccessDigest    , DI const&    , Bool3 late , Comment  ={} , CommentExts    ={} ) ; //!        Fd                    late
+	void new_access(      PD pd , ::string&& f    , AccessDigest ad , DI const& di , Bool3 l    , Comment c={} , CommentExts ces={} ) { new_access({},pd,::move(f),ad,di,l    ,c,ces) ; }
+	void new_access(      PD pd , ::string&& f    , AccessDigest ad , DI const& di ,              Comment c={} , CommentExts ces={} ) { new_access({},pd,::move(f),ad,di,Maybe,c,ces) ; }
 	//
 	void new_guard (::string const& f) { guards.insert(f) ; }
 	//

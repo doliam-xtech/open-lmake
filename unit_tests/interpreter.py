@@ -11,7 +11,7 @@ if __name__!='__main__' :
 	lmake.manifest = (
 		'Lmakefile.py'
 	,	'dep' , 'dep1' , 'dep2'
-	,	*( f'interpreter{i}' for i in range(1,7) )
+	,	*( f'interpreter{i}' for i in range(1,11) )
 	)
 
 	class Indirect(Rule) :
@@ -43,15 +43,15 @@ else :
 
 	import ut
 
-	if True             : print('dep'                          ,file=open( 'dep'             ,'w'))
-	if True             : print('dep1'                         ,file=open( 'dep1'            ,'w'))
-	if True             : print('dep2'                         ,file=open( 'dep2'            ,'w'))
-	if True             : print(f'#!/bin/bash\necho found "$@"',file=open( 'interpreter1'    ,'w'))
-	for i in range(1,6) : print(f'#!interpreter{i}'            ,file=open(f'interpreter{i+1}','w'))
-	for i in range(1,7) : os.chmod(f'interpreter{i}',0o755)
+	if True              : print('dep'                          ,file=open( 'dep'             ,'w'))
+	if True              : print('dep1'                         ,file=open( 'dep1'            ,'w'))
+	if True              : print('dep2'                         ,file=open( 'dep2'            ,'w'))
+	if True              : print(f'#!/bin/bash\necho found "$@"',file=open( 'interpreter1'    ,'w'))
+	for i in range(1,10) : print(f'#!./interpreter{i}'          ,file=open(f'interpreter{i+1}','w'))
+	for i in range(1,11) : os.chmod(f'interpreter{i}',0o755)
 
-	ut.lmake( 'indirect6' , failed=1 , new=5 , rc=1 )         # only recurse 4 times as per POSIX doc, so interpreter1 is not a dep
-	ut.lmake( 'indirect5' , done  =1 , new=1        )         # interpreter1 is new as a source
+	ut.lmake( 'indirect6' , failed=1 , new=... , rc=1 )         # only recurse 4 times as per POSIX doc, so interpreter1 is not a dep
+	ut.lmake( 'indirect5' , done  =1 , new=...        )         # interpreter1 is new as a source
 	for i in range(1,5) : ut.lmake( f'indirect{i}' , done=1 ) # sanity check
 
 	ut.lmake( 'dyn'          , done=1 , new=3 )

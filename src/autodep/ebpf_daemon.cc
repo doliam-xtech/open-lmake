@@ -155,7 +155,7 @@ static constexpr bool SyscallsOk = []() {
 static_assert( SyscallsOk ) ;
 
 static constexpr ::array<::array<EbpfScEntry,NSyscalls>,1+HAS_32> Syscalls = []() {
-	::array<::array<EbpfScEntry,NSyscalls>,2/*is_32*/> res ;
+	::array<::array<EbpfScEntry,NSyscalls>,1+HAS_32> res ;
 	// tracked syscalls
 	#define X(  name,kind,d1,p1,d2,p2,mod,fl,msk,nf) if ( long nr=MACRO_VAL(SYS_##name  ,-1L) ; nr>=0 ) res[0][nr] = EBPF_SCE(kind,d1,p1,d2,p2,mod,fl,msk,nf) ;
 	#define X32(name,kind,d1,p1,d2,p2,mod,fl,msk,nf) if ( long nr=MACRO_VAL(SYS32_##name,-1L) ; nr>=0 ) res[1][nr] = EBPF_SCE(kind,d1,p1,d2,p2,mod,fl,msk,nf) ;

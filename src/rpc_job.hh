@@ -802,8 +802,10 @@ struct UserTraceEntry {
 	}
 	// services
 	::string step() const {
-		if (+comment_exts) return cat(comment,comment_exts) ;
-		else               return cat(comment             ) ;
+		::string res ;
+		if (+comment     ) res << comment      ;
+		if (+comment_exts) res << comment_exts ;
+		return res ;
 	}
 	// data
 	Time::Pdate date         ;

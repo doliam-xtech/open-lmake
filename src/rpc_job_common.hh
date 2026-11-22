@@ -283,9 +283,9 @@ enum class CommentExt : uint8_t {
 ,	Direct
 ,	Err
 ,	File
+,	Killed
 ,	Last
 ,	LdLibraryPath
-,	Killed
 ,	Link     // not Lnk as name is seen by user
 ,	NoFollow
 ,	Orig

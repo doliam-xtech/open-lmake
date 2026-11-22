@@ -60,7 +60,8 @@ namespace EbpfDaemon {
 		// services
 		bool/*ok*/ connect_to_daemon() ;
 		// data
-		EbpfJobId job_id = 0 ;
+		EbpfJobId job_id     = 0     ;
+		bool      readdir_ok = false ;
 	protected :
 		int _ring_buf_fd = -1 ;
 	private :
@@ -112,8 +113,8 @@ namespace EbpfDaemon {
 				case EBPF_NONE         : throw "empty event"s ;                                                                // EBPF_NONE messages should have been filtered out
 				case EBPF_JOB_START    :
 				case EBPF_PROC_START   :
-				case EBPF_THREAD_START : if ( !_ctxs.insert({ hdr.key , {hdr.pid,hdr.tid} }).second ) throw "double thread start"s ; break ;
-				case EBPF_JOB_END      : _done = true ;                                                                              break ;
+				case EBPF_THREAD_START : if ( !_ctxs.insert({ hdr.key , {hdr.start.pid,hdr.start.tid} }).second ) throw "double thread start"s ; break ;
+				case EBPF_JOB_END      : _done = true ;                                                                                          break ;
 				default                : ;
 			}
 			ThreadCtx & ctx = _ctxs.at(hdr.key) ;
