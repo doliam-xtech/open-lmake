@@ -571,6 +571,7 @@ namespace Engine {
 			/**/                                        res << first("",",","")<<")\n"        ;
 		}
 		{	First first ;
+			for( Node t : job->targets() ) t->set_buildable() ;                                 // job->pre_actions requires pre-set_buidable on targets
 			res << ",\tpre_actions = {" ;
 			for( auto const& [t,a] : job->pre_actions(job->rule_match(),ro.flags[ReqFlag::NoIncremental]) )
 				res << first("\n\t\t",",\t")<<mk_py_str(t->name())<<" : "<< mk_py_str(snake(a.tag))<<"\n\t" ;

@@ -1028,7 +1028,7 @@ namespace Engine {
 		SyncGuard     sync_guard { g_config->server_file_sync } ;
 		First         first      ;
 		//
-		status = Status::EarlyError ;                                      // defensive programming : only set status=Ok when deps are checked
+		status = Status::EarlyError ;                                                                     // defensive programming : only set status=Ok when deps are checked
 		for( ::string const& file : req->files ) {
 			RealPath::SolveReport rp  = Job::s_real_path->solve(file,true/*no_follow*/) ;
 			for( ::string& l : rp.lnks ) {
@@ -1061,7 +1061,7 @@ namespace Engine {
 		bool    maybe_new_deps = false        ;
 		Trace trace("_submit_special",job,special_,ri) ;
 		//
-		if (frozen_) req->frozen_jobs.push(job) ;                                          // record to repeat in summary
+		if (frozen_) req->frozen_jobs.push(job) ;                         // record to repeat in summary
 		//
 		switch (special_) {
 			case Special::Dep          : status = Status::Ok ;                                                                       break ;
@@ -1070,7 +1070,7 @@ namespace Engine {
 			case Special::InfinitePath : status = Status::Forbidden ; audit_end_special( req , SpecialStep::Err , No/*modified*/ ) ; break ;
 			case Special::Codec        : _submit_codec(req) ;                                                                        break ;
 			case Special::Plain : {
-				SWEAR(frozen_) ;                                                             // only case where we are here without special rule
+				SWEAR(frozen_) ;                                          // only case where we are here without special rule
 				SpecialStep special_step = SpecialStep::Steady          ;
 				Node        worst_target ;
 				Bool3       modified     = No                           ;
@@ -1264,15 +1264,16 @@ namespace Engine {
 			,	.timeout    =        submit_rsrcs_attrs.timeout
 			,	.tokens1    =        tokens1_
 			} ;
-			estimate_stats(tokens1_) ;                       // refine estimate with best available info just before submitting
-			rsrcs_done = true ;                              // for trace only
+			if (match_gen<Rule::s_match_gen) for( Node t : targets() ) t->set_buildable() ; // necessary as pre_actions require set_buildable called on targets as they must be called from main thread
+			estimate_stats(tokens1_) ;                                                      // refine estimate with best available info just before submitting
+			rsrcs_done = true ;                                                             // for trace only
 			//       vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
 			Backend::s_submit( backend , +job , +req , ::move(si) , ::move(submit_rsrcs_attrs.rsrcs) ) ;
 			//       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-			for( Node t : targets() ) t->busy = true ;       // make targets busy once we are sure job is submitted
+			for( Node t : targets() ) t->busy = true ;                                      // make targets busy once we are sure job is submitted
 		} catch (::string const& e) {
 			trace("early_err",STR(rsrcs_done),e) ;
-			ri.dec_wait() ;                                  // restore n_wait as we prepared to wait
+			ri.dec_wait() ;                                                                 // restore n_wait as we prepared to wait
 			ri.set_step(Step::None,job) ;
 			status = Status::EarlyError ;
 			req->audit_job ( Color::Err  , "failed" , job ) ;
