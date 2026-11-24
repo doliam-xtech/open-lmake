@@ -132,10 +132,10 @@ void AutodepEbpf::Consumer::handle_event( ThreadCtx const& ctx , EbpfEventHdr co
 	SWEAR( hdr.kind>=EBPF_HAS_DATA , hdr.kind ) ;
 	throw_if( hdr.kind==EBPF_PANIC , path.path ) ;
 	//
-	::pair_s<bool/*in_repo*/> real_lcl = _mk_real( ctx , hdr , path           )             ; if (!real_lcl.first) return ;
-	FileInfo                  fi       = _mk_info(       hdr , real_lcl.first )             ;
+	::pair_s<bool/*in_repo*/> real_lcl = _mk_real( ctx , hdr , path           )                   ; if (!real_lcl.first) return ;
+	FileInfo                  fi       = _mk_info(       hdr , real_lcl.first )                   ;
 	AccessDigest              ad       ;
-	Comment                   c        = CommentTab[bool(hdr.flags&EBPF_F_32)][hdr.syscall] ;
+	Comment                   c        = CommentTab[bool(hdr.syscall&0x8000)][hdr.syscall&0x7fff] ;
 	CommentExts               ces      ;
 	if (real_lcl.second) {
 		switch (hdr.kind) {
@@ -154,6 +154,7 @@ void AutodepEbpf::Consumer::handle_event( ThreadCtx const& ctx , EbpfEventHdr co
 	}
 	switch (hdr.kind) {
 		case EBPF_PATH_RES : ces         |= CommentExt::Link ; break ;
+		case EBPF_EXEC     :                                   break ; // XXX : process all open files if !ok as they may not be all reported
 		case EBPF_READDIR  : ad.read_dir  = true             ; break ;
 		default : ;
 	}

@@ -182,8 +182,10 @@ enum EbpfSyscallKind {
 	EBPF_SC_NONE = 0
 	// 1 file
 ,	EBPF_SC_CREATE
+,	EBPF_SC_EXEC
 ,	EBPF_SC_FORBIDDEN
 ,	EBPF_SC_OPEN
+,	EBPF_SC_OPEN2
 ,	EBPF_SC_PATH                   // just analyze PATH, no access to file
 ,	EBPF_SC_READDIR
 ,	EBPF_SC_READLINK
@@ -259,6 +261,7 @@ typedef enum {
 ,	EBPF_PATH_RES              // a symlink has been traversed during path resolution
 	// 1-file accesses
 ,	EBPF_NOP                   // a syscall that does nothing : not reported
+,	EBPF_EXEC
 ,	EBPF_READ
 ,	EBPF_READDIR
 ,	EBPF_UNLINK                // may also read
@@ -287,15 +290,14 @@ typedef enum {
 typedef enum {
 	EBPF_F_STOPPED = 1<<0                                          // thread was stopped and must be continued by userland after analysis
 	// only for accesses
-,	EBPF_F_32        = 1<<1                                        // syscall is from 32-bit exe
-,	EBPF_F_CANON     = 1<<2                                        // file is canonic
-,	EBPF_F_DEP_LNK   = 1<<3                                        // access dep as readlink
-,	EBPF_F_DEP_REG   = 1<<4                                        // access dep as open
-,	EBPF_F_DEP_STAT  = 1<<5                                        // sense dep existence
-,	EBPF_F_NO_FOLLOW = 1<<6                                        // only for EBPF_FILE_UNKNOWN, trailing symlink is not followed
-,	EBPF_F_OK        = 1<<7
-,	EBPF_F_SEEN_LNK  = 1<<8                                        // a symlink has been followed during path resolution
-,	EBPF_F_SEEN_PROC = 1<<9                                        // a symlink has been followed in /proc, care must be taken in case it is /proc/self or /proc/thread-self
+,	EBPF_F_CANON     = 1<<1                                        // file is canonic
+,	EBPF_F_DEP_LNK   = 1<<2                                        // access dep as readlink
+,	EBPF_F_DEP_REG   = 1<<3                                        // access dep as open
+,	EBPF_F_DEP_STAT  = 1<<4                                        // sense dep existence
+,	EBPF_F_NO_FOLLOW = 1<<5                                        // only for EBPF_FILE_UNKNOWN, trailing symlink is not followed
+,	EBPF_F_OK        = 1<<6
+,	EBPF_F_SEEN_LNK  = 1<<7                                        // a symlink has been followed during path resolution
+,	EBPF_F_SEEN_PROC = 1<<8                                        // a symlink has been followed in /proc, care must be taken in case it is /proc/self or /proc/thread-self
 	// aliases
 ,	EBPF_F_DEP_ALL = EBPF_F_DEP_LNK|EBPF_F_DEP_REG|EBPF_F_DEP_STAT // access all aspects of dep, such as with stat
 } EbpfFlag ;
@@ -315,7 +317,7 @@ typedef struct {
 	EbpfFlags  flags     ;
 	uint8_t    kind      ;                   // enum : EbpfKind
 	uint8_t    file_kind ;                   // enum : EbpfFileKind
-	uint16_t   syscall   ;                   // syscall number (16 bits is more than enough), should be in access but layout would be less efficient
+	uint16_t   syscall   ;                   // syscall number (15 bits is more than enough, msb means 32-bit), should be in access but layout would be less efficient
 	union {
 		EbpfEventHdrStart  start  ;          // if kind=EBPF_START*
 		EbpfEventHdrAccess access ;          // if kind>=EBPF_ACCESS

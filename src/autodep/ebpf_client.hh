@@ -110,11 +110,17 @@ namespace EbpfDaemon {
 			//
 			EbpfEventHdr const& hdr = *static_cast<EbpfEventHdr const*>(data) ;
 			switch (hdr.kind) {
-				case EBPF_NONE         : throw "empty event"s ;                                                                // EBPF_NONE messages should have been filtered out
+				case EBPF_NONE      : throw "empty event"s ;    // EBPF_NONE messages should have been filtered out
+				case EBPF_JOB_START : _started = true ; break ;
+				case EBPF_JOB_END   :  _done   = true ; break ;
+				default             : ;
+			}
+			if (!_started) return ;                             // in case ring buffer is recycled, there may be scories from previous job
+			if (_done    ) return ;                             // in case of multi-threads/multi-process, there may be scories after the top-level process as exited
+			switch (hdr.kind) {
 				case EBPF_JOB_START    :
 				case EBPF_PROC_START   :
 				case EBPF_THREAD_START : if ( !_ctxs.insert({ hdr.key , {hdr.start.pid,hdr.start.tid} }).second ) throw "double thread start"s ; break ;
-				case EBPF_JOB_END      : _done = true ;                                                                                          break ;
 				default                : ;
 			}
 			ThreadCtx & ctx = _ctxs.at(hdr.key) ;

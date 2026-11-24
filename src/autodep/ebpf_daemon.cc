@@ -23,6 +23,7 @@
 #include <bpf/bpf.h>
 #include <fcntl.h>
 #include <linux/io_uring.h>
+#include <linux/openat2.h>
 #include <stdio.h>
 #include <sys/epoll.h>
 #include <sys/mman.h>
@@ -30,8 +31,10 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
+#include <sys/vfs.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <utime.h>
 
 #include <cerrno>
 #include <cstdarg>
@@ -221,7 +224,7 @@ private :
 } ;
 
 struct Job {
-	static ::set<EbpfJobId> s_free_ids ;                                                                                                 // ordered to use as small job_ids as possible
+	static ::set<EbpfJobId> s_free_ids ;                                                                                                             // ordered to use as small job_ids as possible
 	// cxtors & co
 	Job() {
 		if (s_free_ids.empty()) throw ::format("cannot allocate new idx") ;
@@ -281,7 +284,7 @@ struct Job {
 ::set<EbpfJobId> Job::s_free_ids ;
 
 static int _pr( enum libbpf_print_level lvl , const char* fmt , va_list ap ) {
-	if (lvl>LIBBPF_WARN)                                                       return 0 ;                                                    // higher lvl means less critical
+	if (lvl>LIBBPF_WARN)                                                       return 0 ;                                                             // higher lvl means less critical
 	else                 { vlog(false/*with_errno*/,false/*with_nl*/,fmt,ap) ; return 1 ; }
 }
 static void _load_ebpf() {
@@ -297,7 +300,7 @@ static void _load_ebpf() {
 	if (_g_skel->rodata->NJobs  > 1<<(sizeof(EbpfJobId )*8) ) throw "too many job ids"       ;
 	if (_g_skel->rodata->NRoots > 1<<(sizeof(EbpfRootId)*8) ) throw "too many roots per job" ;
 	//
-	for( size_t i=1 ; i<_g_skel->rodata->NJobs ; i++ ) Job::s_free_ids.insert(EbpfJobId(i)) ;                                                // do not use 0 as it is reserved as sentinel
+	for( size_t i=1 ; i<_g_skel->rodata->NJobs ; i++ ) Job::s_free_ids.insert(EbpfJobId(i)) ;                                                         // do not use 0 as it is reserved as sentinel
 }
 
 static const char* _g_exe = nullptr ;
@@ -319,7 +322,7 @@ int main( int argc , char* argv[] ) {
 		::string arg     = argv[1] ;
 		int      timeout ;
 		if      (argc==1     ) timeout =      -1 ;
-		if      (arg=="lmake") timeout = 300'000 ;                                                                                      // XXX? : auto calibrate by using 100*start_time
+		if      (arg=="lmake") timeout = 300'000 ;                                                                                       // XXX? : auto calibrate by using 100*start_time
 		else if (arg=="test" ) timeout =       0 ;
 		else                   _usage() ;
 		//
@@ -431,7 +434,7 @@ struct IoUring {
 		sqes                   = s_map<::io_uring_sqe>( sqe_sz     , ring_fd , IORING_OFF_SQES    ) ; if (sqes  ==MAP_FAILED) throw "cannot map io_uring entries"s ;
 		sq_tail                =  reinterpret_cast<uint    *>( sq_ptr + params.sq_off.tail      )   ;
 		sq_array               =  reinterpret_cast<uint    *>( sq_ptr + params.sq_off.array     )   ;
-		sq_flags               =  reinterpret_cast<uint32_t*> (sq_ptr + params.sq_off.flags     )   ;
+		sq_flags               =  reinterpret_cast<uint32_t*>( sq_ptr + params.sq_off.flags     )   ;
 		ring_mask              = *reinterpret_cast<uint    *>( sq_ptr + params.sq_off.ring_mask )   ;
 	}
 	~IoUring() {
@@ -442,16 +445,18 @@ struct IoUring {
 		}
 	}
 	// services
-	void submit( uint8_t op , int fd1 , char const* addr1 , int opt1=-1 , char const* opt2=nullptr ) {
+	void submit( uint8_t op , int fd1 , const char* addr1 , int opt1=-1 , const char* opt2=nullptr , uint32_t flags=-1 , const char* addr3=nullptr ) {
 		uint            tail = *sq_tail  ; if ((tail&ring_mask)!=tail) throw "queue is too short"s ;
 		::io_uring_sqe& sqe = sqes[tail] ; sqe = {} ;
 		//
-		/**/               sqe.flags  = IOSQE_ASYNC|IOSQE_IO_LINK ; // ensure ordered execution
-		/**/               sqe.opcode =       op                  ;
-		/**/               sqe.fd     =       fd1                 ;
-		/**/               sqe.addr   = ulong(addr1)              ;
-		if (opt1!=-1     ) sqe.len    =       opt1                ; // not all fields are necessary for all opcodes
-		if (opt2!=nullptr) sqe.addr2  = ulong(opt2 )              ; // .
+		/**/                     sqe.flags      = IOSQE_ASYNC|IOSQE_IO_LINK ; // ensure ordered execution
+		/**/                     sqe.opcode     =       op                  ;
+		/**/                     sqe.fd         =       fd1                 ;
+		/**/                     sqe.addr       = ulong(addr1)              ;
+		if (opt1 !=-1          ) sqe.len        =       opt1                ; // not all fields are necessary for all opcodes
+		if (opt2 !=nullptr     ) sqe.addr2      = ulong(opt2 )              ; // .
+		if (flags!=uint32_t(-1)) sqe.open_flags =       flags               ; // .
+		if (addr3!=nullptr     ) sqe.addr3      = ulong(addr3)              ; // .
 		//
 		sq_array[tail] = tail ;
 		__atomic_store_n( sq_tail , tail+1 , __ATOMIC_RELEASE ) ;
@@ -475,10 +480,6 @@ struct IoUring {
 } ;
 
 // goal of self test is to ensure all ebpf hooks are actually attached
-// obvious (else job tracking would not start at all) :
-//	tp/syscalls/sys_enter_symlinkat
-//	tp_btf/sched_process_fork
-//	tp_btf/sched_process_exit
 Consumer tracee(::string dir_name={}) {
 	bool work = !dir_name.empty() ;
 	//
@@ -486,33 +487,101 @@ Consumer tracee(::string dir_name={}) {
 	//
 	if (work) RingBufBase::s_start_job() ;
 	//
-	int          dfd ;
-	int          fd  ;
-	int          rc  ;
-	struct stat  st  ;
-	struct statx stx ;
+	char*              sentinel = nullptr       ;
+	::string           abs_d    = dir_name+"/d" ;
+	const char*        abs_d_c  = abs_d.c_str() ;
+	::string           abs_f    = dir_name+"/f" ;
+	const char*        abs_f_c  = abs_f.c_str() ;
+	::string           abs_g    = dir_name+"/g" ;
+	const char*        abs_g_c  = abs_g.c_str() ;
+	::string           abs_l    = dir_name+"/l" ;
+	const char*        abs_l_c  = abs_l.c_str() ;
+	int                mid      ;
+	int                dfd      ;
+	struct file_handle fh       ;
+	struct open_how    how      {}              ; how.flags = O_RDONLY ;
+	struct stat        st       ;
+	struct statx       stx      ;
+	struct statfs      stfs     ;
+	struct utimbuf     utb      {}              ;
+	struct timeval     tv[2]    {}              ;
+	struct timespec    ts[2]    {}              ;
+	char               v[]      = "value"       ;
+	char               buf[100] ;
 	//
-	if (work)   dfd = ::open( dir_name.c_str() , O_DIRECTORY ) ;                                      else res.n_solved += 1 ;     //                                   fexit/do_filp_open
-	if (work) { fd  = ::openat   (       dfd,"f"  , O_CREAT|O_WRONLY|O_TRUNC,0644 ) ; ::close(fd) ; } else res.n_solved += 1 ;     // fentry/security_path_mknod        fexit/do_filp_open
-	if (work) { rc  = ::symlinkat( "f" , dfd,"l"                                  ) ;               } else res.n_solved += 1 ;     // fentry/security_path_symlink      tp_btp/sys_exit
-	if (work) { rc  = ::linkat   (       dfd,"f"  , dfd,"f2",0                    ) ;               } else res.n_solved += 2 ;     // fentry/security_path_link         tp_btp/sys_exit
-	if (work) { rc  = ::renameat (       dfd,"f2" , dfd,"f3"                      ) ;               } else res.n_solved += 2 ;     // fentry/security_path_rename       tp_btp/sys_exit
-	if (work) { fd  = ::openat   (       dfd,"l"  , O_RDONLY                      ) ; ::close(fd) ; } else res.n_solved += 2 ;     // fentry/security_inode_follow_link fexit/do_filp_open
-	if (work) { rc  = ::fstatat  (       dfd,"f"  , &st,0                         ) ;               } else res.n_solved += 1 ;     // fexit/filename_lookup             tp_btp/sys_exit
-	if (work) { rc  = ::unlinkat (       dfd,"l"  , 0                             ) ;               } else res.n_solved += 1 ;     // fentry/security_path_unlink       tp_btp/sys_exit
-	(void)rc ;
+	// This sequence leaks some fd's but we do not care as we are in an isolated process that will die shortly
 	//
-	IoUring uring { work } ;                                                                                                       // tp_btf/task_newtask
-	if (work) uring.submit( IORING_OP_STATX     , dfd,"f"  , STATX_SIZE,reinterpret_cast<char*>(&stx) ) ; else res.n_solved += 1 ; // fexit/io_statx
-	if (work) uring.submit( IORING_OP_SYMLINKAT , dfd,"f"  , -1        ,"l"                           ) ; else res.n_solved += 1 ; // fexit/io_symlinkat,
-	if (work) uring.submit( IORING_OP_LINKAT    , dfd,"f"  , dfd       ,"f4"                          ) ; else res.n_solved += 2 ; // fexit/io_linkat
-	if (work) uring.submit( IORING_OP_RENAMEAT  , dfd,"f4" , dfd       ,"f5"                          ) ; else res.n_solved += 2 ; // fexit/io_renameat
-	if (work) uring.submit( IORING_OP_UNLINKAT  , dfd,"f5"                                            ) ; else res.n_solved += 1 ; // fexit/io_unlinkat
+	if (work) dfd = ::open( dir_name.c_str() , O_DIRECTORY ) ; else res.n_solved += 1 ;
+	//
+	if (work) ::syscall( SYS_creat             ,       abs_f_c , 0666                                       ) ; else res.n_solved   += 1 ;
+	if (work) ::syscall( SYS_access            ,       abs_f_c , X_OK                                       ) ; else res.n_solved   += 1 ;
+	if (work) ::syscall( SYS_faccessat         ,       dfd,"f" , X_OK         , 0                           ) ; else res.n_solved   += 1 ;
+	if (work) ::syscall( SYS_faccessat2        ,       dfd,"f" , X_OK         , 0                           ) ; else res.n_solved   += 1 ;
+	if (work) ::syscall( SYS_chdir             ,       "."                                                  ) ; else res.n_solved   += 0 ;
+	if (work) ::syscall( SYS_chmod             ,       abs_f_c , 0777                                       ) ; else res.n_solved   += 1 ;
+	if (work) ::syscall( SYS_fchmodat          ,       dfd,"f" , 0777         , 0                           ) ; else res.n_solved   += 1 ;
+	if (work) ::syscall( SYS_execve            ,       abs_f_c , &sentinel    , &sentinel                   ) ; else res.n_unsolved += 1 ;
+	if (work) ::syscall( SYS_execveat          ,       dfd,"f" , &sentinel    , &sentinel                   ) ; else res.n_unsolved += 1 ;
+	if (work) ::syscall( SYS_link              ,       abs_f_c , abs_g_c                                    ) ; else res.n_solved   += 2 ;
+	if (work) ::syscall( SYS_unlink            ,       abs_g_c                                              ) ; else res.n_solved   += 1 ;
+	if (work) ::syscall( SYS_linkat            ,       dfd,"f" , dfd,"g"      , 0                           ) ; else res.n_solved   += 2 ;
+	if (work) ::syscall( SYS_unlinkat          ,       dfd,"g" , 0                                          ) ; else res.n_solved   += 1 ;
+	if (work) ::syscall( SYS_mkdir             ,       abs_d_c , 0777                                       ) ; else res.n_solved   += 1 ;
+	if (work) ::syscall( SYS_rmdir             ,       abs_d_c                                              ) ; else res.n_solved   += 1 ;
+	if (work) ::syscall( SYS_mkdirat           ,       dfd,"d" , 0777                                       ) ; else res.n_solved   += 1 ;
+	if (work) ::syscall( SYS_rmdir             ,       abs_d_c                                              ) ; else res.n_solved   += 1 ;
+	if (work) ::syscall( SYS_mknod             ,       abs_g_c , S_IFREG|0666 , 0                           ) ; else res.n_solved   += 1 ;
+	if (work) ::syscall( SYS_unlink            ,       abs_g_c                                              ) ; else res.n_solved   += 1 ;
+	if (work) ::syscall( SYS_mknodat           ,       dfd,"g" , S_IFREG|0666 , 0                           ) ; else res.n_solved   += 1 ;
+	if (work) ::syscall( SYS_unlinkat          ,       dfd,"g" , 0                                          ) ; else res.n_solved   += 1 ;
+	if (work) ::syscall( SYS_name_to_handle_at ,       dfd,"f" , &fh          , &mid        , 0             ) ; else res.n_solved   += 1 ;
+	if (work) ::syscall( SYS_open              ,       abs_f_c , O_RDONLY                                   ) ; else res.n_solved   += 1 ;
+	if (work) ::syscall( SYS_openat            ,       dfd,"f" , O_RDONLY                                   ) ; else res.n_solved   += 1 ;
+	if (work) ::syscall( SYS_openat2           ,       dfd,"f" , &how         , sizeof(how)                 ) ; else res.n_solved   += 1 ;
+	if (work) ::syscall( SYS_symlink           , "f" , abs_l_c                                              ) ; else res.n_solved   += 1 ;
+	if (work) ::syscall( SYS_unlink            ,       abs_l_c                                              ) ; else res.n_solved   += 1 ;
+	if (work) ::syscall( SYS_symlinkat         , "g" , dfd,"l"                                              ) ; else res.n_solved   += 1 ;
+	if (work) ::syscall( SYS_readlink          ,       abs_l_c , buf          , sizeof(buf)                 ) ; else res.n_solved   += 1 ;
+	if (work) ::syscall( SYS_readlinkat        ,       dfd,"l" , buf          , sizeof(buf)                 ) ; else res.n_solved   += 1 ;
+	if (work) ::syscall( SYS_rename            ,       abs_f_c , abs_g_c                                    ) ; else res.n_solved   += 2 ;
+	if (work) ::syscall( SYS_renameat          ,       dfd,"g" , dfd,"f"                                    ) ; else res.n_solved   += 2 ;
+	if (work) ::syscall( SYS_renameat2         ,       dfd,"f" , dfd,"g"      , 0                           ) ; else res.n_solved   += 2 ;
+	if (work) ::syscall( SYS_stat              ,       abs_l_c , &st                                        ) ; else res.n_solved   += 2 ;
+	if (work) ::syscall( SYS_lstat             ,       abs_l_c , &st          , 0                           ) ; else res.n_solved   += 1 ;
+	if (work) ::syscall( SYS_statx             ,       dfd,"l" , 0            , 0           , &stx          ) ; else res.n_solved   += 2 ;
+	if (work) ::syscall( SYS_newfstatat        ,       dfd,"l" , &st          , 0                           ) ; else res.n_solved   += 2 ;
+	if (work) ::syscall( SYS_statfs            ,       abs_g_c , &stfs                                      ) ; else res.n_solved   += 1 ;
+	if (work) ::syscall( SYS_truncate          ,       abs_g_c , 0                                          ) ; else res.n_solved   += 1 ;
+	if (work) ::syscall( SYS_utime             ,       abs_g_c , &utb                                       ) ; else res.n_solved   += 1 ;
+	if (work) ::syscall( SYS_utimes            ,       abs_g_c , tv                                         ) ; else res.n_solved   += 1 ;
+	if (work) ::syscall( SYS_utimensat         ,       dfd,"g" , ts           , 0                           ) ; else res.n_solved   += 1 ;
+	if (work) ::syscall( SYS_setxattr          ,       abs_g_c , "user.name"  , v           , sizeof(v) , 0 ) ; else res.n_solved   += 1 ;
+	if (work) ::syscall( SYS_getxattr          ,       abs_g_c , "user.name"  , v           , sizeof(v)     ) ; else res.n_solved   += 1 ;
+	if (work) ::syscall( SYS_listxattr         ,       abs_g_c , v            , sizeof(v)                   ) ; else res.n_solved   += 1 ;
+	if (work) ::syscall( SYS_removexattr       ,       abs_g_c , "user.name"                                ) ; else res.n_solved   += 1 ;
+	if (work) ::syscall( SYS_lsetxattr         ,       abs_l_c , "user.name"  , v           , sizeof(v) , 0 ) ; else res.n_solved   += 1 ;
+	if (work) ::syscall( SYS_lgetxattr         ,       abs_l_c , "user.name"  , v           , sizeof(v)     ) ; else res.n_solved   += 1 ;
+	if (work) ::syscall( SYS_llistxattr        ,       abs_l_c , v            , sizeof(v)                   ) ; else res.n_solved   += 1 ;
+	if (work) ::syscall( SYS_lremovexattr      ,       abs_l_c , "user.name"                                ) ; else res.n_solved   += 1 ;
+	if (work) ::syscall( SYS_unlink            ,       abs_l_c                                              ) ; else res.n_solved   += 1 ;
+	//
+	IoUring uring { work } ;
+	//
+	if (work) uring.submit( IORING_OP_OPENAT    , dfd      , "g"         , 0           , 0                             , O_RDONLY           ) ; else res.n_solved += 1 ;
+	if (work) uring.submit( IORING_OP_OPENAT2   , dfd      , "g"         , sizeof(how) , reinterpret_cast<char*>(&how)                      ) ; else res.n_solved += 1 ;
+	if (work) uring.submit( IORING_OP_MKDIRAT   , dfd      , "d"         , 0777                                                             ) ; else res.n_solved += 1 ;
+	if (work) uring.submit( IORING_OP_STATX     , dfd      , "g"         , STATX_SIZE  , reinterpret_cast<char*>(&stx)                      ) ; else res.n_solved += 1 ;
+	if (work) uring.submit( IORING_OP_SYMLINKAT , dfd      , "g"         , -1          , "l"                                                ) ; else res.n_solved += 1 ;
+	if (work) uring.submit( IORING_OP_LINKAT    , dfd      , "g"         , dfd         , "g2"                                               ) ; else res.n_solved += 2 ;
+	if (work) uring.submit( IORING_OP_RENAMEAT  , dfd      , "g2"        , dfd         , "g3"                                               ) ; else res.n_solved += 2 ;
+	if (work) uring.submit( IORING_OP_UNLINKAT  , dfd      , "g3"                                                                           ) ; else res.n_solved += 1 ;
+	// XXX : fix xattr in io_uring
+//	if (work) uring.submit( IORING_OP_SETXATTR  , AT_FDCWD , "user.name" , sizeof(v)   , v                             , 0        , abs_g_c ) ; else res.n_solved += 1 ;
+//	if (work) uring.submit( IORING_OP_GETXATTR  , AT_FDCWD , "user.name" , sizeof(v)   , v                             , -1       , abs_g_c ) ; else res.n_solved += 1 ;
 	//
 	if (work) uring.flush() ;
 	if (work) ::close(dfd)  ;
 	//
-(void)dfd;(void)fd;(void)st;(void)stx;
 	return res ;
 }
 
