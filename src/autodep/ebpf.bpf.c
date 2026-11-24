@@ -737,7 +737,7 @@ int BPF_PROG( on_follow_link , struct dentry* dentry , struct inode* inode , boo
 // when it succeeds, path is the resolved object, and nothing has been modified yet
 SEC("fexit/filename_lookup")
 int BPF_PROG( on_filename_lookup , int dfd , struct filename* name , unsigned flags , struct path* path , struct path* root , int ret ) {
-	/**/                                                 if (!_is_ok(ret)) return 0 ; // path is not filled up, processed at sys_exit time
+	/**/                                                 if (!_is_ok(ret)) return 0 ;                                                     // path is not filled up, processed at sys_exit time
 	Task         * tv     = _capturing2()              ; if (!tv         ) return 0 ;
 	struct dentry* dentry = BPF_CORE_READ(path,dentry) ; if (!dentry     ) return 0 ;
 	_capture_solved( tv , dentry ) ;
@@ -862,8 +862,8 @@ int BPF_PROG( on_sys_exit , struct pt_regs* regs , long ret ) {
 	struct task_struct* t     = bpf_get_current_task_btf() ;
 	Task              * tv    = _capturing1(t)             ; if ( !tv          ) return 0 ;
 	EbpfEvent         * ev    = &tv->ev                    ;
-	EbpfScEntry         descr = _get_descr(ev)             ; if (!descr        ) return 0 ;                          // syscall accesses no file names
-	/**/                                                     if (_is_retry(ret)) return 0 ;                          // error is external, no real dependency nor action
+	EbpfScEntry         descr = _get_descr(ev)             ; if (!descr        ) return 0 ;                      // syscall accesses no file names
+	/**/                                                     if (_is_retry(ret)) return 0 ;                      // error is external, no real dependency nor action
 	uint8_t  sc_kind   = EBPF_SCE_KIND (descr) ;
 	uint8_t  arg_dfd1  = EBPF_SCE_DFD1 (descr) ;
 	uint8_t  arg_path1 = EBPF_SCE_PATH1(descr) ;
@@ -918,12 +918,16 @@ int BPF_PROG( on_sys_exit , struct pt_regs* regs , long ret ) {
 				if (ev->hdr.flags&EBPF_F_OK) return 0 ;                                                          // all open files are already reported in on_file_open
 				ev->hdr.kind = EBPF_EXEC ;
 			break ;
+			case EBPF_SC_CREAT :
+				flags = O_CREAT|O_WRONLY|O_TRUNC ;
+			goto Open ;
 			case EBPF_SC_OPEN2 : {
 				struct open_how how ;
 				long            rc  = bpf_probe_read_user( &how , sizeof(how) , (void*)get_arg(args,arg_flgs,0/*dflt*/) ) ; if (rc!=0) return 0 ;
 				flags = (int)how.flags ;
-			} [[fallthrough]] ;
+			} goto Open ;
 			case EBPF_SC_OPEN :
+			Open :
 				_process_open_flags( ev , flags ) ;
 				no_follow = (uint8_t)-1 ;                                                                        // no_follow is processed in _process_open_flags
 			break ;
@@ -933,7 +937,7 @@ int BPF_PROG( on_sys_exit , struct pt_regs* regs , long ret ) {
 				else if (!_access_is_read(get_arg(args,arg_mod ,-1/*.   */))) ev->hdr.flags |= EBPF_F_DEP_STAT ; // if a mod is provided, it is a access call
 				else                                                          ev->hdr.flags |= EBPF_F_DEP_ALL  ; // else, it is a stat call and size is accessible
 			break ;
-			case EBPF_SC_CREATE :
+			case EBPF_SC_MKNOD :
 				switch (get_arg(args,arg_mod,S_IFLNK)) {                                                         // default value must generate a (any kind of) file and in practice is symlink
 					case S_IFREG :
 					case S_IFLNK : ev->hdr.kind = EBPF_WRITE ; break ;

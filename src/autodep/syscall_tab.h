@@ -18,7 +18,7 @@
 	X( chmod             , UPDATE    , -1 , 0   , -1 ,-1   , -1 , -1  , -1 , 0                     ) \
 	X( fchmodat          , UPDATE    ,  0 , 1   , -1 ,-1   , -1 , -1  , -1 , 0                     ) /* flags is not implemented for fchmodat (cf man 2 fchmod)     */ \
 	X( chroot            , FORBIDDEN , -1 , 0   , -1 ,-1   , -1 , -1  , -1 , 0                     ) \
-	X( creat             , OPEN      , -1 , 0   , -1 ,-1   , -1 , -1  , -1 , 0                     ) \
+	X( creat             , CREAT     , -1 , 0   , -1 ,-1   ,  1 , -1  , -1 , 0                     ) /* like open, except flags are implied                         */ \
 	X( execve            , EXEC      , -1 , 0   , -1 ,-1   , -1 , -1  , -1 , 0                     ) \
 	X( execveat          , EXEC      ,  0 , 1   , -1 ,-1   , -1 ,  4  , -1 , EBPF_SC_MAY_NO_FOLLOW ) \
 	X( getdents          , READDIR   ,  0 ,-1   , -1 ,-1   , -1 , -1  , -1 , 0                     ) \
@@ -27,14 +27,14 @@
 	X( linkat            , LINK      ,  0 , 1   ,  2 , 3   , -1 ,  4  , -1 , EBPF_SC_MAY_FOLLOW    ) \
 	X( mkdir             , PATH      , -1 , 0   , -1 ,-1   ,  1 , -1  , -1 , 1                     ) \
 	X( mkdirat           , PATH      ,  0 , 1   , -1 ,-1   ,  2 , -1  , -1 , 1                     ) \
-	X( mknod             , CREATE    , -1 , 0   , -1 ,-1   ,  1 , -1  , -1 , 1                     ) \
-	X( mknodat           , CREATE    ,  0 , 1   , -1 ,-1   ,  2 , -1  , -1 , 1                     ) \
+	X( mknod             , MKNOD     , -1 , 0   , -1 ,-1   ,  1 , -1  , -1 , 1                     ) \
+	X( mknodat           , MKNOD     ,  0 , 1   , -1 ,-1   ,  2 , -1  , -1 , 1                     ) \
 	X( mount             , FORBIDDEN , -1 , 1   , -1 ,-1   , -1 , -1  , -1 , 0                     ) \
 	X( move_mount        , FORBIDDEN ,  0 , 1   ,  2 , 3   , -1 , -1  , -1 , 0                     ) \
 	X( name_to_handle_at , PATH      ,  0 , 1   , -1 ,-1   , -1 ,  4  , -1 , EBPF_SC_MAY_FOLLOW    ) \
-	X( open              , OPEN      , -1 , 0   , -1 ,-1   , -1 , -1  , -1 , 0                     ) /* no_follow is processed specially                            */ \
-	X( openat            , OPEN      ,  0 , 1   , -1 ,-1   , -1 ,  2  , -1 , 0                     ) /* .                                                           */ \
-	X( openat2           , OPEN2     ,  0 , 1   , -1 ,-1   , -1 ,  2  , -1 , 0                     ) /* flags is actually how                                       */ \
+	X( open              , OPEN      , -1 , 0   , -1 ,-1   ,  2 , -1  , -1 , 0                     ) /* no_follow is processed specially                            */ \
+	X( openat            , OPEN      ,  0 , 1   , -1 ,-1   ,  3 ,  2  , -1 , 0                     ) /* .                                                           */ \
+	X( openat2           , OPEN2     ,  0 , 1   , -1 ,-1   ,  3 ,  2  , -1 , 0                     ) /* flags is actually how                                       */ \
 	X( open_tree         , FORBIDDEN ,  0 , 1   , -1 ,-1   , -1 ,  2  , -1 , EBPF_SC_MAY_NO_FOLLOW ) \
 	X( open_tree_attr    , FORBIDDEN ,  0 , 1   , -1 ,-1   , -1 ,  2  , -1 , EBPF_SC_MAY_NO_FOLLOW ) \
 	X( readdir           , READDIR   ,  0 ,-1   , -1 ,-1   , -1 , -1  , -1 , 0                     ) \
@@ -55,8 +55,8 @@
 	X( oldlstat          , STAT      , -1 , 0   , -1 ,-1   , -1 , -1  , -1 , 1                     ) \
 	X( statfs            , PATH      , -1 , 0   , -1 ,-1   , -1 , -1  , -1 , 0                     ) \
 	X( statfs64          , PATH      , -1 , 0   , -1 ,-1   , -1 , -1  , -1 , 0                     ) \
-	X( symlink           , CREATE    , -1 , 1   , -1 ,-1   , -1 , -1  , -1 , 1                     ) \
-	X( symlinkat         , CREATE    ,  1 , 2   , -1 ,-1   , -1 , -1  , -1 , 1                     ) \
+	X( symlink           , UPDATE    , -1 , 1   , -1 ,-1   , -1 , -1  , -1 , 1                     ) \
+	X( symlinkat         , UPDATE    ,  1 , 2   , -1 ,-1   , -1 , -1  , -1 , 1                     ) \
 	X( truncate          , UPDATE    , -1 , 0   , -1 ,-1   , -1 , -1  , -1 , 0                     ) \
 	X( umount            , FORBIDDEN , -1 , 0   , -1 ,-1   , -1 , -1  , -1 , 0                     ) \
 	X( umount2           , FORBIDDEN , -1 , 0   , -1 ,-1   , -1 , -1  , -1 , 0                     ) \

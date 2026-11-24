@@ -53,6 +53,7 @@ typedef uint16_t EbpfFlags  ;
 #define EBPF_O_RDONLY            000000000
 #define EBPF_O_TMPFILE           020200000
 #define EBPF_O_TRUNC             000001000
+#define EBPF_O_WRONLY            000000001
 #define EBPF_PATH_MAX            4096
 #define EBPF_RENAME_EXCHANGE       0x2
 #define EBPF_RENAME_NOREPLACE      0x1
@@ -90,6 +91,7 @@ typedef uint16_t EbpfFlags  ;
 		static_assert( EBPF_O_TMPFILE == O_TMPFILE ) ;
 	#endif
 	static_assert( EBPF_O_TRUNC  == O_TRUNC  ) ;
+	static_assert( EBPF_O_WRONLY == O_WRONLY ) ;
 	static_assert( EBPF_PATH_MAX == PATH_MAX ) ;
 	#ifdef RENAME_EXCHANGE
 		static_assert( EBPF_RENAME_EXCHANGE == RENAME_EXCHANGE ) ;
@@ -133,6 +135,7 @@ typedef uint16_t EbpfFlags  ;
 	#define O_RDONLY            EBPF_O_RDONLY
 	#define O_TMPFILE           EBPF_O_TMPFILE
 	#define O_TRUNC             EBPF_O_TRUNC
+	#define O_WRONLY            EBPF_O_WRONLY
 	#define PATH_MAX            EBPF_PATH_MAX
 	#define RENAME_EXCHANGE     EBPF_RENAME_EXCHANGE
 	#define RENAME_NOREPLACE    EBPF_RENAME_NOREPLACE
@@ -181,9 +184,10 @@ typedef uint32_t EbpfScEntry ;
 enum EbpfSyscallKind {
 	EBPF_SC_NONE = 0
 	// 1 file
-,	EBPF_SC_CREATE
+,	EBPF_SC_CREAT
 ,	EBPF_SC_EXEC
 ,	EBPF_SC_FORBIDDEN
+,	EBPF_SC_MKNOD
 ,	EBPF_SC_OPEN
 ,	EBPF_SC_OPEN2
 ,	EBPF_SC_PATH                   // just analyze PATH, no access to file
